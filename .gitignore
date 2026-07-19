@@ -1,0 +1,10 @@
+# build artifacts
+amtui
+applemusic-tui
+
+# local working notes
+PROBLEM.md
+DESIGN.md
+docs/superpowers/
+
+.DS_Store
