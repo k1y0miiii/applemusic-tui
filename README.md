@@ -73,7 +73,8 @@ cd applemusic-tui
 The script builds from source and installs `amtui` (plus `applemusic` and
 `applemusic-tui` aliases) into `~/.local/bin`, adding it to PATH for
 zsh / bash / fish. `--prefix DIR` installs elsewhere, `--no-path` leaves your
-shell config alone.
+shell config alone. If Chrome is missing, the installer offers to install it
+(Homebrew on macOS, the official `.deb` or AUR on Linux).
 
 On macOS the live visualizer needs the Xcode Command Line Tools
 (`xcode-select --install`) — the installer checks for them.

@@ -238,6 +238,116 @@ quote_shell_word() {
 	printf "'%s'" "$quoted_value"
 }
 
+browser_found() {
+	case "$OS" in
+		Darwin)
+			[ -x "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" ] ||
+				command -v google-chrome >/dev/null 2>&1 ||
+				command -v chromium >/dev/null 2>&1
+			;;
+		Linux)
+			command -v google-chrome >/dev/null 2>&1 ||
+				command -v google-chrome-stable >/dev/null 2>&1 ||
+				command -v chromium >/dev/null 2>&1 ||
+				command -v chromium-browser >/dev/null 2>&1
+			;;
+	esac
+}
+
+tty_available() {
+	( : </dev/tty ) 2>/dev/null
+}
+
+confirm() {
+	printf '%s [y/N] ' "$1" >/dev/tty
+	IFS= read -r confirm_reply </dev/tty || return 1
+	case "$confirm_reply" in
+		[Yy]|[Yy][Ee][Ss]) return 0 ;;
+		*) return 1 ;;
+	esac
+}
+
+warn_no_browser() {
+	case "$OS" in
+		Darwin)
+			printf '\nWarning: install Google Chrome before running amtui.\n' >&2
+			;;
+		Linux)
+			printf '\nWarning: install Google Chrome or Chromium with Widevine support.\n' >&2
+			;;
+	esac
+}
+
+install_chrome_darwin() {
+	if ! command -v brew >/dev/null 2>&1; then
+		printf 'Homebrew is not available. Install Chrome manually:\n' >&2
+		printf '  https://www.google.com/chrome/\n' >&2
+		return
+	fi
+	if confirm "Install Google Chrome now with Homebrew?"; then
+		brew install --cask google-chrome ||
+			die "brew install --cask google-chrome failed"
+	fi
+}
+
+install_chrome_linux() {
+	if command -v apt-get >/dev/null 2>&1; then
+		if confirm "Download and install Google Chrome (.deb, needs sudo)?"; then
+			chrome_deb=$BUILD_DIR/google-chrome-stable_current_amd64.deb
+			if command -v curl >/dev/null 2>&1; then
+				curl -fsSL -o "$chrome_deb" \
+					https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb ||
+					die "cannot download the Google Chrome package"
+			elif command -v wget >/dev/null 2>&1; then
+				wget -qO "$chrome_deb" \
+					https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb ||
+					die "cannot download the Google Chrome package"
+			else
+				die "curl or wget is required to download Google Chrome"
+			fi
+			# The tty redirect feeds sudo's password prompt, not the file read.
+			# shellcheck disable=SC2024
+			sudo apt-get install -y "$chrome_deb" </dev/tty ||
+				die "apt-get install of Google Chrome failed"
+		fi
+		return
+	fi
+	if command -v pacman >/dev/null 2>&1; then
+		for aur_helper in yay paru; do
+			if command -v "$aur_helper" >/dev/null 2>&1; then
+				if confirm "Install google-chrome from the AUR with $aur_helper?"; then
+					"$aur_helper" -S google-chrome </dev/tty ||
+						die "$aur_helper -S google-chrome failed"
+				fi
+				return
+			fi
+		done
+		printf 'Install Chrome from the AUR (google-chrome) or add Widevine to Chromium.\n' >&2
+		return
+	fi
+	printf 'Install Google Chrome manually: https://www.google.com/chrome/\n' >&2
+}
+
+ensure_browser() {
+	if browser_found; then
+		return
+	fi
+	printf '\nGoogle Chrome (or Chromium with Widevine) is required to run amtui.\n'
+	if ! tty_available; then
+		warn_no_browser
+		return
+	fi
+	case "$OS" in
+		Darwin) install_chrome_darwin ;;
+		Linux) install_chrome_linux ;;
+	esac
+	if browser_found; then
+		printf 'Browser found — continuing.\n'
+	else
+		warn_no_browser
+	fi
+}
+
 CONFIG_FILE_1=
 CONFIG_BLOCK_1=
 CONFIG_FILE_2=
@@ -338,6 +448,8 @@ if BUILD_DIR=$(mktemp -d "${TMPDIR:-/tmp}/amtui-install.XXXXXX"); then
 else
 	die "cannot create a temporary build directory"
 fi
+
+ensure_browser
 
 CONFIGURED_GOMODCACHE=${GOMODCACHE:-}
 if [ -z "$CONFIGURED_GOMODCACHE" ]; then
@@ -446,20 +558,9 @@ fi
 
 case "$OS" in
 	Darwin)
-		if [ ! -x "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" ] &&
-			! command -v google-chrome >/dev/null 2>&1 &&
-			! command -v chromium >/dev/null 2>&1; then
-			printf '\nWarning: install Google Chrome before running amtui.\n' >&2
-		fi
 		printf '\nOn first launch, allow System Audio Recording for the terminal/amtui.\n'
 		;;
 	Linux)
-		if ! command -v google-chrome >/dev/null 2>&1 &&
-			! command -v google-chrome-stable >/dev/null 2>&1 &&
-			! command -v chromium >/dev/null 2>&1 &&
-			! command -v chromium-browser >/dev/null 2>&1; then
-			printf '\nWarning: install Google Chrome or Chromium with Widevine support.\n' >&2
-		fi
 		printf '\nLive visualizer requires pipewire-pulse or PulseAudio.\n'
 		;;
 esac

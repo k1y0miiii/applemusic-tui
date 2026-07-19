@@ -75,7 +75,9 @@ cd applemusic-tui
 Скрипт собирает проект из исходников и ставит `amtui` (плюс алиасы
 `applemusic` и `applemusic-tui`) в `~/.local/bin`, прописывая PATH для
 zsh / bash / fish. `--prefix DIR` — установить в другой каталог,
-`--no-path` — не трогать конфиг шелла.
+`--no-path` — не трогать конфиг шелла. Если Chrome не найден, установщик
+предложит поставить его сам (Homebrew на macOS, официальный `.deb` или AUR
+на Linux).
 
 На macOS живому визуализатору нужны Xcode Command Line Tools
 (`xcode-select --install`) — установщик сам это проверит.
