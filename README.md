@@ -60,7 +60,9 @@ through the system mixer (the web player serves AAC 256; no lossless).
   or **Linux** with `pipewire-pulse` (or plain PulseAudio) for live capture
 
 > Linux support is **experimental** — designed for Arch/Ubuntu, currently less
-> tested than macOS.
+> tested than macOS. On Hyprland the browser window is auto-hidden into a
+> special workspace (Wayland forbids offscreen positioning); other Wayland
+> compositors may leave the window visible for now.
 
 ## Install
 

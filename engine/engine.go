@@ -116,7 +116,7 @@ func open(dir string, visible bool) (context.Context, []context.CancelFunc, erro
 	}
 	if !visible {
 		tctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		err := (cdpWindowController{}).parkOffscreen(tctx)
+		err := newWindowController(browserPID(ctx)).parkOffscreen(tctx)
 		cancel()
 		if err != nil {
 			closeAll(cancels)
@@ -322,7 +322,7 @@ func Connect(status func(string)) (*Engine, error) {
 		ctx:     ctx,
 		cancels: cancels,
 		park:    !visible,
-		windows: cdpWindowController{},
+		windows: newWindowController(browserPID(ctx)),
 	}, nil
 }
 
