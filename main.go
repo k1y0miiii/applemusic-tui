@@ -530,6 +530,7 @@ func (m model) updateKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.themeName = next.name
 		applyTheme(next)
 		saveThemeName(next.name)
+		m.applyAutoTheme()
 		m.note, m.noteAt = "theme · "+next.name, m.t
 	case "R": // reload the web player when it wedges
 		m.note, m.noteAt = "reloading engine…", m.t

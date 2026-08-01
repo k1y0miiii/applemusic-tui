@@ -1,6 +1,8 @@
 package main
 
 import (
+	"image"
+	"image/color"
 	"os"
 	"path/filepath"
 	"strings"
@@ -156,5 +158,66 @@ func TestConfigInt(t *testing.T) {
 	}
 	if got := configInt(cfg, "artwork.missing", 30); got != 30 {
 		t.Errorf("configInt(missing) = %d, want the default 30", got)
+	}
+}
+
+func TestDominantColorPicksTheSaturatedHue(t *testing.T) {
+	// Mostly dark grey with a block of strong blue: the blue must win.
+	img := image.NewRGBA(image.Rect(0, 0, 20, 20))
+	for y := 0; y < 20; y++ {
+		for x := 0; x < 20; x++ {
+			img.Set(x, y, color.RGBA{R: 20, G: 20, B: 22, A: 255})
+		}
+	}
+	for y := 0; y < 8; y++ {
+		for x := 0; x < 8; x++ {
+			img.Set(x, y, color.RGBA{R: 20, G: 80, B: 220, A: 255})
+		}
+	}
+	c, ok := dominantColor(img)
+	if !ok {
+		t.Fatal("dominantColor() reported no usable color")
+	}
+	if !(c.B > c.R && c.B > c.G) {
+		t.Errorf("dominant color %v is not blue-dominant", c)
+	}
+}
+
+func TestDominantColorRejectsGreyscale(t *testing.T) {
+	img := image.NewRGBA(image.Rect(0, 0, 16, 16))
+	for y := 0; y < 16; y++ {
+		for x := 0; x < 16; x++ {
+			img.Set(x, y, color.RGBA{R: 128, G: 128, B: 128, A: 255})
+		}
+	}
+	if _, ok := dominantColor(img); ok {
+		t.Error("dominantColor() accepted a greyscale image; want ok = false")
+	}
+}
+
+func TestDominantColorNilImage(t *testing.T) {
+	if _, ok := dominantColor(nil); ok {
+		t.Error("dominantColor(nil) returned ok = true")
+	}
+}
+
+func TestAccentTrioIsReadable(t *testing.T) {
+	// A near-black cover must still produce a visible accent.
+	dark := colorfulRGB(10, 10, 40)
+	a, hi, lo := accentTrio(dark)
+	if a == "" || hi == "" || lo == "" {
+		t.Fatal("accentTrio returned empty colors")
+	}
+	_, _, v := hexToHSV(string(a))
+	if v < 0.5 {
+		t.Errorf("accent value = %.2f, want >= 0.50 for readability", v)
+	}
+	_, _, vhi := hexToHSV(string(hi))
+	if vhi < v {
+		t.Errorf("accentHi value %.2f is not brighter than accent %.2f", vhi, v)
+	}
+	_, _, vlo := hexToHSV(string(lo))
+	if vlo >= v {
+		t.Errorf("accentLo value %.2f is not darker than accent %.2f", vlo, v)
 	}
 }
