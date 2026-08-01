@@ -3,7 +3,7 @@
 [English](README.md) · **Русский**
 
 ![Go 1.26](https://img.shields.io/badge/Go-1.26-555?style=flat-square&logo=go&logoColor=white)
-![Platforms](https://img.shields.io/badge/platforms-macOS%20%C2%B7%20Linux-555?style=flat-square)
+![Platforms](https://img.shields.io/badge/platforms-macOS%20%C2%B7%20Linux%20%C2%B7%20Windows-555?style=flat-square)
 ![License: MIT](https://img.shields.io/badge/license-MIT-555?style=flat-square)
 
 `amtui` — терминальный плеер Apple Music: полноценный TUI-клиент с поиском по
@@ -86,7 +86,33 @@
 > прячется в special workspace (Wayland запрещает уводить окна за экран);
 > на других Wayland-композиторах окно пока может оставаться видимым.
 
+> Windows-бинарники **не протестированы и неполны**: они собираются и плеер
+> работает, но бэкенда захвата системного звука под Windows нет, поэтому
+> визуализатор всегда идёт в честно подписанном режиме симуляции. Нужен
+> Windows Terminal — старая консоль рисует TUI некорректно. Отчёты приветствуются.
+
 ## Установка
+
+### Готовые бинарники
+
+Возьмите архив под свою платформу в
+[последнем релизе](https://github.com/k1y0miiii/applemusic-tui/releases/latest) —
+macOS (Apple Silicon / Intel), Linux (x86-64 / arm64) и Windows
+(x86-64 / arm64):
+
+```sh
+tar -xzf amtui-*-linux-amd64.tar.gz
+sudo install -m755 amtui-*/amtui /usr/local/bin/amtui
+amtui --version
+```
+
+В каждом релизе есть файл `SHA256SUMS`, проверка —
+`shasum -a 256 -c SHA256SUMS`.
+
+Бинарники под macOS не подписаны, поэтому перед первым запуском нужно
+`xattr -d com.apple.quarantine amtui` (или правый клик → «Открыть»).
+
+### Из исходников
 
 ```sh
 git clone https://github.com/k1y0miiii/applemusic-tui
@@ -110,7 +136,9 @@ zsh / bash / fish. `--prefix DIR` — установить в другой ка�
 
 Тесты — `make test`, полная проверка — `make verify`.
 
-> Готовые бинарники в планах. Пока установщик собирает из исходников.
+> Собрать все релизные архивы самому: `make dist`. Полный набор получается
+> только на macOS — darwin-сборкам нужен cgo для CoreAudio-визуализатора, а
+> цели Linux и Windows на чистом Go и кросс-компилируются откуда угодно.
 
 ## Первый запуск
 

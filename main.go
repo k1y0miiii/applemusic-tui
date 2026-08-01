@@ -6,6 +6,8 @@ import (
 	"image"
 	"log"
 	"math"
+	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -1096,7 +1098,18 @@ func (m model) View() string {
 	return lipgloss.JoinVertical(lipgloss.Left, top, transport)
 }
 
+// version is stamped at build time with -ldflags "-X main.version=...".
+// Release builds carry the tag; a plain `go build` stays "dev".
+var version = "dev"
+
 func main() {
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "--version", "-v", "version":
+			fmt.Printf("amtui %s %s/%s\n", version, runtime.GOOS, runtime.GOARCH)
+			return
+		}
+	}
 	m := model{statusCh: make(chan string, 8), status: "starting…"}
 	m.cfg = loadConfig()
 	m.artCache = newArtCache(8)

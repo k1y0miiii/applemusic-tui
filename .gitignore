@@ -1,6 +1,7 @@
 # build artifacts
 amtui
 applemusic-tui
+dist/
 
 # local working notes
 PROBLEM.md

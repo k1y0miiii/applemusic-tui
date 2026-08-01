@@ -3,7 +3,7 @@
 **English** · [Русский](README.ru.md)
 
 ![Go 1.26](https://img.shields.io/badge/Go-1.26-555?style=flat-square&logo=go&logoColor=white)
-![Platforms](https://img.shields.io/badge/platforms-macOS%20%C2%B7%20Linux-555?style=flat-square)
+![Platforms](https://img.shields.io/badge/platforms-macOS%20%C2%B7%20Linux%20%C2%B7%20Windows-555?style=flat-square)
 ![License: MIT](https://img.shields.io/badge/license-MIT-555?style=flat-square)
 
 `amtui` is a terminal Apple Music player — a full TUI client with catalog
@@ -87,7 +87,32 @@ through the system mixer (the web player serves AAC 256; no lossless).
 > special workspace (Wayland forbids offscreen positioning); other Wayland
 > compositors may leave the window visible for now.
 
+> Windows binaries are **untested and incomplete**: they build and the player
+> works, but there is no system-audio capture backend on Windows, so the
+> visualizer always runs in its labeled simulated mode. Use Windows Terminal —
+> the legacy console does not render the TUI correctly. Reports welcome.
+
 ## Install
+
+### Prebuilt binaries
+
+Grab the archive for your platform from the
+[latest release](https://github.com/k1y0miiii/applemusic-tui/releases/latest) —
+macOS (Apple Silicon / Intel), Linux (x86-64 / arm64) and Windows
+(x86-64 / arm64):
+
+```sh
+tar -xzf amtui-*-linux-amd64.tar.gz
+sudo install -m755 amtui-*/amtui /usr/local/bin/amtui
+amtui --version
+```
+
+Every release ships a `SHA256SUMS` file; verify with `shasum -a 256 -c SHA256SUMS`.
+
+macOS binaries are unsigned, so the first launch needs
+`xattr -d com.apple.quarantine amtui` (or right-click → Open).
+
+### From source
 
 ```sh
 git clone https://github.com/k1y0miiii/applemusic-tui
@@ -109,7 +134,10 @@ build runs the visualizer in simulated mode instead of capturing real audio.
 
 Run the test suite with `make test`, or `make verify` for the full check.
 
-> Prebuilt binaries are planned. For now, the installer builds from source.
+> Building all release archives yourself: `make dist`. macOS is the only host
+> that produces a complete set — the darwin builds need cgo for the CoreAudio
+> visualizer, while the Linux and Windows targets are pure Go and
+> cross-compile from anywhere.
 
 ## First run
 

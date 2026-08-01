@@ -1,0 +1,78 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version label for a dry-run build (no release is published)"
+        required: false
+        default: dev
+
+permissions:
+  contents: write
+
+jobs:
+  # One macOS runner covers the whole matrix: darwin needs CGO_ENABLED=1 for the
+  # CoreAudio visualizer and so cannot be cross-compiled from Linux, while the
+  # linux and windows targets are pure Go and cross-compile from anywhere.
+  release:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          check-latest: true
+
+      # The engine tests drive a real headless Chrome through CDP and have no
+      # skip guard, so the runner needs a browser. Gating the release on them is
+      # deliberate: shipping an unverified binary is the worse failure.
+      - name: Install Chrome for the engine tests
+        run: brew install --cask --no-quarantine google-chrome
+
+      - name: Verify before shipping
+        run: make vet test
+
+      # Both the tag name and the dispatch input reach the shell through env
+      # rather than ${{ }} interpolation, so no crafted version string can be
+      # spliced into the command or forge extra $GITHUB_OUTPUT lines.
+      - name: Resolve version
+        id: v
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            raw="$GITHUB_REF_NAME"
+          else
+            raw="$INPUT_VERSION"
+          fi
+          case "$raw" in
+            *[!A-Za-z0-9._-]*|"")
+              echo "refusing version '$raw': expected only [A-Za-z0-9._-]" >&2
+              exit 1
+              ;;
+          esac
+          echo "version=$raw" >> "$GITHUB_OUTPUT"
+
+      - name: Build every target
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+        run: make dist VERSION="$VERSION"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: amtui-${{ steps.v.outputs.version }}
+          path: dist/
+
+      - name: Publish the release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "amtui ${GITHUB_REF_NAME}" \
+            --generate-notes \
+            dist/*
