@@ -1,6 +1,12 @@
 package main
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/charmbracelet/lipgloss"
+)
 
 // theme is a full palette. The zero-value name "" is never registered.
 type theme struct {
@@ -49,4 +55,52 @@ func nextTheme(name string) theme {
 		}
 	}
 	return themes[0]
+}
+
+// configDir matches the engine's convention (engine/engine.go:65) rather than
+// os.UserConfigDir, which on macOS points at ~/Library/Application Support.
+// AMTUI_CONFIG_DIR overrides it, which is also how the tests isolate state.
+func configDir() string {
+	if d := os.Getenv("AMTUI_CONFIG_DIR"); d != "" {
+		return d
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".config", "amtui")
+}
+
+// The chosen theme lives in its own one-line file so writing it back never
+// clobbers the comments in config.toml.
+func themeFile() string {
+	d := configDir()
+	if d == "" {
+		return ""
+	}
+	return filepath.Join(d, "theme")
+}
+
+func loadThemeName() string {
+	p := themeFile()
+	if p == "" {
+		return ""
+	}
+	b, err := os.ReadFile(p)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
+}
+
+// saveThemeName is best-effort: a read-only config dir must not break the UI.
+func saveThemeName(name string) {
+	p := themeFile()
+	if p == "" {
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		return
+	}
+	_ = os.WriteFile(p, []byte(name+"\n"), 0o644)
 }

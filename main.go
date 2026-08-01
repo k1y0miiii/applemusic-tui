@@ -89,6 +89,8 @@ type model struct {
 	focus  int // 0 queue, 1 player
 	selIdx int
 
+	themeName string // active theme, persisted across runs
+
 	statusCh chan string
 
 	// queue-replacement in flight (slow setQueue on playlists/albums)
@@ -485,6 +487,12 @@ func (m model) updateKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, doCmd(eng.ToggleShuffle)
 	case "r":
 		return m, doCmd(eng.CycleRepeat)
+	case "t":
+		next := nextTheme(m.themeName)
+		m.themeName = next.name
+		applyTheme(next)
+		saveThemeName(next.name)
+		m.note, m.noteAt = "theme · "+next.name, m.t
 	case "R": // reload the web player when it wedges
 		m.note, m.noteAt = "reloading engine…", m.t
 		m.lyFor = ""
@@ -758,7 +766,7 @@ func (m model) transportPanel(w int) string {
 	}
 	hints := "↑↓ select · ↵ play · / search · space pause · tab → player · q quit "
 	if m.focus == 1 {
-		hints = "←→ seek · ↑↓ volume · n/p track · s/r modes · R reload · tab → queue · q quit "
+		hints = "←→ seek · ↑↓ volume · n/p track · s/r modes · t theme · R reload · tab → queue · q quit "
 	}
 	if m.note != "" {
 		hints = m.note + " "
@@ -858,6 +866,11 @@ func (m model) View() string {
 
 func main() {
 	m := model{statusCh: make(chan string, 8), status: "starting…"}
+	m.themeName = themes[0].name
+	if t := themeByName(loadThemeName()); t != nil {
+		m.themeName = t.name
+		applyTheme(*t)
+	}
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		log.Fatal(err)

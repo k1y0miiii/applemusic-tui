@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestApplyThemeSwitchesPalette(t *testing.T) {
 	defer applyTheme(themes[0])
@@ -40,4 +44,31 @@ func TestNextThemeWraps(t *testing.T) {
 	if got := nextTheme("unknown").name; got != themes[0].name {
 		t.Errorf("nextTheme(unknown) = %q, want %q", got, themes[0].name)
 	}
+}
+
+func TestSaveAndLoadThemeName(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("AMTUI_CONFIG_DIR", dir)
+
+	if got := loadThemeName(); got != "" {
+		t.Errorf("loadThemeName() on empty dir = %q, want \"\"", got)
+	}
+
+	saveThemeName("nord")
+	if got := loadThemeName(); got != "nord" {
+		t.Errorf("loadThemeName() = %q, want \"nord\"", got)
+	}
+
+	// Trailing whitespace written by a human editing the file is tolerated.
+	if err := os.WriteFile(filepath.Join(dir, "theme"), []byte("gruvbox\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := loadThemeName(); got != "gruvbox" {
+		t.Errorf("loadThemeName() = %q, want \"gruvbox\"", got)
+	}
+}
+
+func TestSaveThemeNameIsBestEffort(t *testing.T) {
+	t.Setenv("AMTUI_CONFIG_DIR", "/proc/nonexistent-amtui-path")
+	saveThemeName("nord") // must not panic on an unwritable directory
 }
