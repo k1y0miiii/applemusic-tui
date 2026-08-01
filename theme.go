@@ -279,6 +279,25 @@ func accentTrio(c colorful.Color) (lipgloss.Color, lipgloss.Color, lipgloss.Colo
 		lipgloss.Color(lo.Hex())
 }
 
+// pulseGain caps how far the bass can brighten the accent. Small on purpose:
+// a big swing reads as flicker, not rhythm.
+const pulseGain = 0.22
+
+// pulse brightens c by amount (0..1). An unparsable color is returned as-is so
+// a bad config value can never blank the UI.
+func pulse(c lipgloss.Color, amount float64) lipgloss.Color {
+	if amount <= 0 {
+		return c
+	}
+	col, err := colorful.Hex(string(c))
+	if err != nil {
+		return c
+	}
+	h, s, v := col.Hsv()
+	v = math.Min(v+amount*pulseGain, 1)
+	return lipgloss.Color(colorful.Hsv(h, s, v).Hex())
+}
+
 // hexToHSV is a test and debugging helper for asserting on generated colors.
 func hexToHSV(hex string) (h, s, v float64) {
 	c, err := colorful.Hex(hex)

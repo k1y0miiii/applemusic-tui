@@ -617,10 +617,12 @@ func centeredRows(s string, w, rows int) string {
 	return strings.TrimRight(b.String(), "\n")
 }
 
-func panel(title, body string, w, h int, focused bool) string {
+// panel draws a bordered box. accentNow is the (possibly bass-pulsed) accent
+// used for the focused border; callers pass m.pulsedAccent().
+func panel(title, body string, w, h int, focused bool, accentNow lipgloss.Color) string {
 	bc, tc := borderDim, fgFaint
 	if focused {
-		bc, tc = accent, accentHi
+		bc, tc = accentNow, accentHi
 	}
 	head := lipgloss.NewStyle().Foreground(tc).Bold(true).Render(" " + title)
 	content := pad(head, w) + "\n" + body
@@ -772,6 +774,16 @@ func bassLevel(bands [32]float64) float64 {
 	}
 	return sum / 4
 }
+
+// pulseAmount is the current bass energy, or 0 when the pulse is switched off.
+func (m model) pulseAmount() float64 {
+	if !configBool(m.cfg, "visualizer.pulse", true) || !m.st.Playing {
+		return 0
+	}
+	return bassLevel(m.vizBands)
+}
+
+func (m model) pulsedAccent() lipgloss.Color { return pulse(accent, m.pulseAmount()) }
 
 // simulatedBands is the fallback animation, moved out of vizPanel so the peak
 // markers and the waveform see the same values in live and simulated modes.
@@ -991,11 +1003,11 @@ func (m model) progressBar(barW, filled int) string {
 	rest := lipgloss.NewStyle().Foreground(borderDim).
 		Render(strings.Repeat("─", max(0, barW-filled)))
 	if !configBool(m.cfg, "visualizer.wave", true) {
-		return lipgloss.NewStyle().Foreground(accentHi).
+		return lipgloss.NewStyle().Foreground(pulse(accentHi, m.pulseAmount())).
 			Render(strings.Repeat("━", filled)) + rest
 	}
 	steps := []rune("▁▂▃▄▅▆▇█")
-	st := lipgloss.NewStyle().Foreground(accentHi)
+	st := lipgloss.NewStyle().Foreground(pulse(accentHi, m.pulseAmount()))
 	var b strings.Builder
 	for c := 0; c < filled; c++ {
 		lvl := m.wv.column(c, barW)
@@ -1039,16 +1051,16 @@ func (m model) View() string {
 	vw := rightW - 2
 	lh := topH - vh - 2
 
-	left := panel("QUEUE", m.queuePanel(qw, qh), qw, qh, m.focus == 0)
-	viz := panel(m.visualizerTitle(), m.vizPanel(vw, vh-2), vw, vh-2, false)
-	lyr := panel("LYRICS", m.lyricsPanel(vw, lh), vw, lh, false)
+	left := panel("QUEUE", m.queuePanel(qw, qh), qw, qh, m.focus == 0, m.pulsedAccent())
+	viz := panel(m.visualizerTitle(), m.vizPanel(vw, vh-2), vw, vh-2, false, m.pulsedAccent())
+	lyr := panel("LYRICS", m.lyricsPanel(vw, lh), vw, lh, false, m.pulsedAccent())
 	right := lipgloss.JoinVertical(lipgloss.Left, viz, lyr)
 	top := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 
 	tw := m.w - 2
 	transport := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(map[bool]lipgloss.Color{true: accent, false: borderDim}[m.focus == 1]).
+		BorderForeground(map[bool]lipgloss.Color{true: m.pulsedAccent(), false: borderDim}[m.focus == 1]).
 		Width(tw).Render(m.transportPanel(tw))
 
 	return lipgloss.JoinVertical(lipgloss.Left, top, transport)

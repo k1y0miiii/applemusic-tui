@@ -161,6 +161,37 @@ func TestConfigInt(t *testing.T) {
 	}
 }
 
+func TestPulseBrightensWithAmount(t *testing.T) {
+	base := lipgloss.Color("#804020")
+	_, _, v0 := hexToHSV(string(pulse(base, 0)))
+	_, _, v1 := hexToHSV(string(pulse(base, 1)))
+	if v1 <= v0 {
+		t.Errorf("pulse(1) value %.3f is not brighter than pulse(0) %.3f", v1, v0)
+	}
+}
+
+func TestPulseZeroIsIdentity(t *testing.T) {
+	base := lipgloss.Color("#804020")
+	if got := pulse(base, 0); !strings.EqualFold(string(got), "#804020") {
+		t.Errorf("pulse(base, 0) = %v, want the base color unchanged", got)
+	}
+}
+
+func TestPulseClampsAtWhite(t *testing.T) {
+	base := lipgloss.Color("#FFFFFF")
+	_, _, v := hexToHSV(string(pulse(base, 10)))
+	if v > 1.0001 {
+		t.Errorf("pulse value = %.4f, want <= 1", v)
+	}
+}
+
+func TestPulseIgnoresInvalidColor(t *testing.T) {
+	base := lipgloss.Color("not-a-color")
+	if got := pulse(base, 0.5); got != base {
+		t.Errorf("pulse(invalid) = %v, want the input returned unchanged", got)
+	}
+}
+
 func TestDominantColorPicksTheSaturatedHue(t *testing.T) {
 	// Mostly dark grey with a block of strong blue: the blue must win.
 	img := image.NewRGBA(image.Rect(0, 0, 20, 20))
