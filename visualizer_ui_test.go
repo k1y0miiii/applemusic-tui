@@ -69,17 +69,27 @@ func TestViewRendersVisualizerStateLabel(t *testing.T) {
 }
 
 func TestSyntheticBarsRenderOnlyAfterVisualizerFallsBack(t *testing.T) {
-	starting := model{
+	// The simulated animation lives in the model and is advanced by the tick,
+	// so drive both cases through Update rather than calling vizPanel cold.
+	advance := func(m model) model {
+		next, _ := m.Update(tickMsg(time.Now()))
+		return next.(model)
+	}
+
+	starting := advance(model{
 		t:          1.7,
 		st:         engine.State{Playing: true},
 		vizOpening: true,
-	}
+	})
 	if got := starting.vizPanel(60, 10); strings.ContainsAny(got, "▁▂▃▄▅▆▇█") {
 		t.Fatalf("starting visualizer rendered simulated bars:\n%s", got)
 	}
 
-	simulated := starting
-	simulated.vizOpening = false
+	simulated := advance(model{
+		t:          1.7,
+		st:         engine.State{Playing: true},
+		vizOpening: false,
+	})
 	if got := simulated.vizPanel(60, 10); !strings.ContainsAny(got, "▁▂▃▄▅▆▇█") {
 		t.Fatalf("fallback visualizer did not render simulated bars:\n%s", got)
 	}

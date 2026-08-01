@@ -129,6 +129,7 @@ type model struct {
 	vizTerminal bool
 	vizBands    [32]float64 // smoothed, 0..1
 	vizTargets  [32]float64
+	vizPeaks    [32]float64 // peak-hold markers, decay slowly
 
 	// search overlay
 	searchOpen bool
@@ -349,9 +350,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
-		for i := range m.vizBands {
-			m.vizBands[i] += (m.vizTargets[i] - m.vizBands[i]) * 0.45
+		if m.vizLive {
+			for i := range m.vizBands {
+				m.vizBands[i] += (m.vizTargets[i] - m.vizBands[i]) * 0.45
+			}
+		} else if !m.vizOpening {
+			m.vizBands = simulatedBands(m.t, m.st.Playing)
+		} else {
+			m.vizBands = [32]float64{}
 		}
+		decayPeaks(&m.vizPeaks, m.vizBands)
 		if visualizerClose != nil {
 			return m, tea.Batch(tick(), visualizerClose)
 		}
@@ -688,20 +696,42 @@ func liveBarHeights(bands [32]float64, bars, rows int) []float64 {
 	return heights
 }
 
+// peakDecay is the fall rate of the hold markers, per 30 fps frame.
+const peakDecay = 0.012
+
+// decayPeaks makes each peak follow its band up instantly and fall slowly —
+// the Winamp behaviour.
+func decayPeaks(peaks *[32]float64, bands [32]float64) {
+	for i := range peaks {
+		if bands[i] > peaks[i] {
+			peaks[i] = bands[i]
+			continue
+		}
+		peaks[i] = max(peaks[i]-peakDecay, 0)
+	}
+}
+
+// simulatedBands is the fallback animation, moved out of vizPanel so the peak
+// markers and the waveform see the same values in live and simulated modes.
+func simulatedBands(t float64, playing bool) [32]float64 {
+	var bands [32]float64
+	for i := range bands {
+		x := t*1.35 + float64(i)*0.55
+		a := 0.24 + 0.62*math.Abs(math.Sin(x))*(0.5+0.5*math.Sin(t*0.43+float64(i)*1.9))
+		if !playing {
+			a *= 0.06 // ponytail: bars just collapse on pause, no decay animation
+		}
+		bands[i] = min(max(a, 0), 1)
+	}
+	return bands
+}
+
 func (m model) vizPanel(w, h int) string {
 	rows, bars := h-1, max(1, w/3)
-	heights := make([]float64, bars)
-	if m.vizLive {
-		heights = liveBarHeights(m.vizBands, bars, rows)
-	} else if !m.vizOpening {
-		for i := range heights {
-			x := m.t*1.35 + float64(i)*0.55
-			a := 0.24 + 0.62*math.Abs(math.Sin(x))*(0.5+0.5*math.Sin(m.t*0.43+float64(i)*1.9))
-			if !m.st.Playing {
-				a *= 0.06 // ponytail: bars just collapse on pause, no decay animation
-			}
-			heights[i] = a * float64(rows)
-		}
+	heights := liveBarHeights(m.vizBands, bars, rows)
+	var peaks []float64
+	if configBool(m.cfg, "visualizer.peaks", true) {
+		peaks = liveBarHeights(m.vizPeaks, bars, rows)
 	}
 	partial := []rune("▁▂▃▄▅▆▇█")
 	var b strings.Builder
@@ -715,14 +745,20 @@ func (m model) vizPanel(w, h int) string {
 			color = accent
 		}
 		st := lipgloss.NewStyle().Foreground(color)
+		markSt := lipgloss.NewStyle().Foreground(fgDim)
 		var row strings.Builder
 		for i := 0; i < bars; i++ {
+			// A marker only shows where the bar itself is not already drawn.
+			mark := peaks != nil && peaks[i] > level-1 && peaks[i] <= level &&
+				heights[i] <= level-1
 			switch {
 			case heights[i] >= level:
 				row.WriteString(st.Render("██"))
 			case heights[i] > level-1:
 				c := string(partial[min(7, int((heights[i]-level+1)*8))])
 				row.WriteString(st.Render(c + c))
+			case mark:
+				row.WriteString(markSt.Render("▔▔"))
 			default:
 				row.WriteString("  ")
 			}
