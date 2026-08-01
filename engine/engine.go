@@ -21,6 +21,7 @@ type Track struct {
 	ID, Title, Artist, Album string
 	Kind                     string // song | album | playlist (for playable results)
 	Duration                 time.Duration
+	Art                      string // artwork URL template with {w}/{h} placeholders
 }
 
 type State struct {
@@ -380,12 +381,14 @@ type jsTrack struct {
 	Album  string `json:"album"`
 	Kind   string `json:"kind"`
 	DurMs  int    `json:"durMs"`
+	Art    string `json:"art"`
 }
 
 func (t jsTrack) track() Track {
 	return Track{
 		ID: t.ID, Title: t.Title, Artist: t.Artist, Album: t.Album, Kind: t.Kind,
 		Duration: time.Duration(t.DurMs) * time.Millisecond,
+		Art:      t.Art,
 	}
 }
 

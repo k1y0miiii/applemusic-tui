@@ -15,6 +15,8 @@ const stateJS = `(async () => {
       artist: a.artistName || '',
       album: a.albumName || '',
       durMs: a.durationInMillis || 0,
+      // Template URL with {w}/{h} placeholders; the Go side picks the size.
+      art: (a.artwork && a.artwork.url) || '',
     };
   };
   const q = mk.queue;

@@ -4,11 +4,32 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/chromedp/chromedp"
 )
+
+func TestJSTrackCarriesArtworkURL(t *testing.T) {
+	jt := jsTrack{
+		ID:    "1",
+		Title: "Song",
+		Art:   "https://example.com/{w}x{h}bb.jpg",
+	}
+	if got := jt.track().Art; got != jt.Art {
+		t.Errorf("Track.Art = %q, want %q", got, jt.Art)
+	}
+}
+
+func TestStateJSRequestsArtwork(t *testing.T) {
+	if !strings.Contains(stateJS, "artwork") {
+		t.Error("stateJS does not read the artwork attribute")
+	}
+	if !strings.Contains(stateJS, "art:") {
+		t.Error("stateJS does not return an art field")
+	}
+}
 
 func testPage(t *testing.T) context.Context {
 	t.Helper()
