@@ -2,7 +2,11 @@ package main
 
 import (
 	"math"
+	"strings"
 	"testing"
+	"time"
+
+	"github.com/k1y0miiii/applemusic-tui/engine"
 )
 
 func TestPeakHoldRisesInstantlyAndDecays(t *testing.T) {
@@ -136,5 +140,41 @@ func TestBassLevelUsesLowBandsOnly(t *testing.T) {
 	}
 	if got := bassLevel(high); got != 0 {
 		t.Errorf("bassLevel(high only) = %.4f, want 0", got)
+	}
+}
+
+func TestQueueTitleShowsPositionAndRemaining(t *testing.T) {
+	m := model{st: engine.State{
+		QueuePos: 1,
+		Pos:      30 * time.Second,
+		Queue: []engine.Track{
+			{Duration: 3 * time.Minute},
+			{Duration: 4 * time.Minute},
+			{Duration: 5 * time.Minute},
+		},
+	}}
+	got := m.queueTitle()
+	if !strings.Contains(got, "2/3") {
+		t.Errorf("queueTitle() = %q, want it to contain \"2/3\"", got)
+	}
+	// 4:00 current track minus 0:30 played, plus 5:00 remaining = 8:30.
+	if !strings.Contains(got, "8:30") {
+		t.Errorf("queueTitle() = %q, want it to contain \"8:30\"", got)
+	}
+}
+
+func TestQueueTitleEmptyQueue(t *testing.T) {
+	m := model{st: engine.State{QueuePos: -1}}
+	if got := m.queueTitle(); got != "QUEUE" {
+		t.Errorf("queueTitle() = %q, want \"QUEUE\"", got)
+	}
+}
+
+func TestFmtLongTimeAddsHours(t *testing.T) {
+	if got := fmtLongTime(90 * time.Minute); got != "1:30:00" {
+		t.Errorf("fmtLongTime(90m) = %q, want \"1:30:00\"", got)
+	}
+	if got := fmtLongTime(8*time.Minute + 30*time.Second); got != "8:30" {
+		t.Errorf("fmtLongTime(8m30s) = %q, want \"8:30\"", got)
 	}
 }

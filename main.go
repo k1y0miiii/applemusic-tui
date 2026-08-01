@@ -934,6 +934,33 @@ func fmtTime(d time.Duration) string {
 	return fmt.Sprintf("%d:%02d", s/60, s%60)
 }
 
+// fmtLongTime is fmtTime with an hours field for queue totals.
+func fmtLongTime(d time.Duration) string {
+	s := int(d.Seconds())
+	if s >= 3600 {
+		return fmt.Sprintf("%d:%02d:%02d", s/3600, (s%3600)/60, s%60)
+	}
+	return fmt.Sprintf("%d:%02d", s/60, s%60)
+}
+
+// queueTitle labels the queue panel with the position and the time left,
+// counting the unplayed part of the current track plus everything after it.
+func (m model) queueTitle() string {
+	q := m.st.Queue
+	if len(q) == 0 || m.st.QueuePos < 0 || m.st.QueuePos >= len(q) {
+		return "QUEUE"
+	}
+	left := q[m.st.QueuePos].Duration - m.st.Pos
+	if left < 0 {
+		left = 0
+	}
+	for _, tr := range q[m.st.QueuePos+1:] {
+		left += tr.Duration
+	}
+	return fmt.Sprintf("QUEUE · %d/%d · %s left",
+		m.st.QueuePos+1, len(q), fmtLongTime(left))
+}
+
 func (m model) transportPanel(w int) string {
 	icon := "⏸"
 	if !m.st.Playing {
@@ -957,6 +984,9 @@ func (m model) transportPanel(w int) string {
 	l1 := pink.Render(" ▀▀ ") +
 		lipgloss.NewStyle().Foreground(fgBright).Bold(true).Render(title) +
 		faint.Render(" — "+artist)
+	if album := m.st.Now.Album; album != "" {
+		l1 += faint.Render(" · " + album)
+	}
 	if m.audioInitializing() {
 		l1 = m.audioInitializingLine()
 	} else if m.loading != "" {
@@ -1051,7 +1081,7 @@ func (m model) View() string {
 	vw := rightW - 2
 	lh := topH - vh - 2
 
-	left := panel("QUEUE", m.queuePanel(qw, qh), qw, qh, m.focus == 0, m.pulsedAccent())
+	left := panel(m.queueTitle(), m.queuePanel(qw, qh), qw, qh, m.focus == 0, m.pulsedAccent())
 	viz := panel(m.visualizerTitle(), m.vizPanel(vw, vh-2), vw, vh-2, false, m.pulsedAccent())
 	lyr := panel("LYRICS", m.lyricsPanel(vw, lh), vw, lh, false, m.pulsedAccent())
 	right := lipgloss.JoinVertical(lipgloss.Left, viz, lyr)
