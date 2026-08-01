@@ -1077,11 +1077,11 @@ func (m model) lyricsPanel(w, h int) string {
 			line = lines[r]
 		}
 		// Center the cover vertically against the lyrics block.
-		right := strings.Repeat(" ", artCols)
+		left := strings.Repeat(" ", artCols)
 		if r >= top && r-top < len(cover) {
-			right = cover[r-top]
+			left = cover[r-top]
 		}
-		b.WriteString(pad(line, textW) + " " + right + "\n")
+		b.WriteString(left + " " + pad(line, textW) + "\n")
 	}
 	return strings.TrimRight(b.String(), "\n")
 }

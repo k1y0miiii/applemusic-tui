@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/k1y0miiii/applemusic-tui/lyrics"
 )
 
 func solidImage(w, h int, c color.Color) image.Image {
@@ -119,5 +121,26 @@ func TestArtworkCacheNilIsSafe(t *testing.T) {
 	c.put("a", solidImage(2, 2, color.RGBA{R: 1, A: 255})) // must not panic
 	if _, ok := c.get("a"); ok {
 		t.Error("nil cache reported a hit")
+	}
+}
+
+// The cover sits to the left of the lyrics, so the text has to start after it.
+func TestLyricsCoverSitsLeftOfTheText(t *testing.T) {
+	const w, h = 80, 20
+	m := model{
+		w: 120, h: 35, phase: phaseReady, st: demoState(),
+		art: solidImage(32, 32, color.RGBA{200, 40, 40, 255}),
+		ly:  lyrics.Lyrics{Lines: []lyrics.Line{{Text: "UNIQUELYRICLINE"}}},
+	}
+	artCols, _ := artworkLayout(w, h-1, 30)
+	if artCols == 0 {
+		t.Fatal("artworkLayout gave no cover at a size that should fit one")
+	}
+
+	for i, line := range strings.Split(m.lyricsPanel(w, h), "\n") {
+		plain := lipgloss.NewStyle().Render(line)
+		if idx := strings.Index(plain, "UNIQUELYRICLINE"); idx >= 0 && idx < artCols {
+			t.Fatalf("line %d puts lyrics at column %d, inside the %d-column cover", i, idx, artCols)
+		}
 	}
 }
