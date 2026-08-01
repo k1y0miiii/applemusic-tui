@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"image"
 	"log"
 	"math"
 	"strings"
@@ -66,6 +67,10 @@ type (
 		id string // track the lyrics belong to
 		ly lyrics.Lyrics
 	}
+	artMsg struct {
+		id  string // track the artwork belongs to
+		img image.Image
+	}
 	visualizerOpenedMsg struct {
 		service *visualizer.Service
 		err     error
@@ -110,6 +115,11 @@ type model struct {
 	ly     lyrics.Lyrics
 	lyFor  string // track ID the fetch was fired for
 	lyBusy bool
+
+	// album artwork for the current track
+	art      image.Image
+	artFor   string    // track ID the image belongs to
+	artCache *artCache // decoded covers, shared across tracks
 
 	// real spectrum; falls back to fake animation
 	vizService  *visualizer.Service
@@ -285,6 +295,18 @@ func fetchLyricsCmd(id, artist, title string, dur time.Duration) tea.Cmd {
 	}
 }
 
+func fetchArtworkCmd(id, template string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), artworkTimeout)
+		defer cancel()
+		img, err := fetchArtwork(ctx, artworkURL(template, artworkPx))
+		if err != nil {
+			return artMsg{id: id} // nil image: the panel just shows lyrics only
+		}
+		return artMsg{id: id, img: img}
+	}
+}
+
 func (m model) Init() tea.Cmd {
 	return tea.Batch(tick(), connectCmd(m.statusCh), listenStatus(m.statusCh))
 }
@@ -420,12 +442,27 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.lyFor, m.lyBusy, m.ly = id, true, lyrics.Lyrics{}
 				cmd = fetchLyricsCmd(id, m.st.Now.Artist, m.st.Now.Title, m.st.Now.Duration)
 			}
+			if id := m.st.Now.ID; id != "" && id != m.artFor {
+				m.artFor, m.art = id, nil
+				if cached, ok := m.artCache.get(id); ok {
+					m.art = cached
+					m.applyAutoTheme()
+				} else if tmpl := m.st.Now.Art; tmpl != "" {
+					cmd = tea.Batch(cmd, fetchArtworkCmd(id, tmpl))
+				}
+			}
 		}
 		poll := tea.Tick(500*time.Millisecond, func(time.Time) tea.Msg { return pollMsg{} })
 		return m, tea.Batch(poll, cmd)
 	case lyricsMsg:
 		if msg.id == m.lyFor {
 			m.ly, m.lyBusy = msg.ly, false
+		}
+	case artMsg:
+		if msg.id == m.artFor && msg.img != nil {
+			m.art = msg.img
+			m.artCache.put(msg.id, msg.img)
+			m.applyAutoTheme()
 		}
 	case noteMsg:
 		m.note, m.noteAt = string(msg), m.t
@@ -697,6 +734,40 @@ func (m model) vizPanel(w, h int) string {
 
 func (m model) lyricsPanel(w, h int) string {
 	rows := h - 1
+	artCols, artRows := 0, 0
+	if configBool(m.cfg, "artwork.enabled", true) && m.art != nil {
+		artCols, artRows = artworkLayout(w, rows, configInt(m.cfg, "artwork.min_lyrics_width", 30))
+	}
+	textW := w
+	if artCols > 0 {
+		textW = w - artCols - 1
+	}
+	text := m.lyricsText(textW, rows)
+	if artCols == 0 {
+		return text
+	}
+	cover := renderArtwork(m.art, artCols, artRows)
+	lines := strings.Split(text, "\n")
+	top := (rows - artRows) / 2
+	var b strings.Builder
+	for r := 0; r < rows; r++ {
+		line := ""
+		if r < len(lines) {
+			line = lines[r]
+		}
+		// Center the cover vertically against the lyrics block.
+		right := strings.Repeat(" ", artCols)
+		if r >= top && r-top < len(cover) {
+			right = cover[r-top]
+		}
+		b.WriteString(pad(line, textW) + " " + right + "\n")
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// lyricsText is the text column of the lyrics panel, sized independently of the
+// cover so the two can sit side by side.
+func (m model) lyricsText(w, rows int) string {
 	faint := lipgloss.NewStyle().Foreground(fgFaint)
 	center := func(s string) string {
 		var b strings.Builder
@@ -868,6 +939,7 @@ func (m model) View() string {
 func main() {
 	m := model{statusCh: make(chan string, 8), status: "starting…"}
 	m.cfg = loadConfig()
+	m.artCache = newArtCache(8)
 	t := themeFromConfig(m.cfg, loadThemeName())
 	m.themeName = t.name
 	applyTheme(t)

@@ -64,6 +64,36 @@ func TestRenderArtworkRejectsDegenerateSizes(t *testing.T) {
 	}
 }
 
+func TestArtworkLayout(t *testing.T) {
+	// Wide panel: cover takes 2 columns per row, capped at 24.
+	cols, rows := artworkLayout(68, 11, 30)
+	if rows != 11 || cols != 22 {
+		t.Errorf("artworkLayout(68,11,30) = (%d,%d), want (22,11)", cols, rows)
+	}
+
+	// Cap: a very tall panel must not produce a cover wider than 24.
+	cols, _ = artworkLayout(100, 20, 30)
+	if cols != 24 {
+		t.Errorf("cols = %d, want the 24-column cap", cols)
+	}
+
+	// Narrow panel: hiding the cover leaves the lyrics their full width.
+	cols, rows = artworkLayout(39, 11, 30)
+	if cols != 0 || rows != 0 {
+		t.Errorf("artworkLayout(39,11,30) = (%d,%d), want (0,0)", cols, rows)
+	}
+}
+
+func TestArtworkLayoutRespectsMinLyricsWidth(t *testing.T) {
+	// 68 - 22 - 1 gap = 45 columns of lyrics: fits a 40 minimum, not a 50 one.
+	if cols, _ := artworkLayout(68, 11, 40); cols == 0 {
+		t.Error("cover hidden even though 45 columns remain for lyrics")
+	}
+	if cols, _ := artworkLayout(68, 11, 50); cols != 0 {
+		t.Error("cover shown even though only 45 columns remain for lyrics")
+	}
+}
+
 func TestArtworkCacheEvictsOldest(t *testing.T) {
 	c := newArtCache(2)
 	a := solidImage(2, 2, color.RGBA{R: 1, A: 255})
@@ -81,5 +111,13 @@ func TestArtworkCacheEvictsOldest(t *testing.T) {
 	}
 	if _, ok := c.get("d"); !ok {
 		t.Error("d missing from the cache")
+	}
+}
+
+func TestArtworkCacheNilIsSafe(t *testing.T) {
+	var c *artCache
+	c.put("a", solidImage(2, 2, color.RGBA{R: 1, A: 255})) // must not panic
+	if _, ok := c.get("a"); ok {
+		t.Error("nil cache reported a hit")
 	}
 }

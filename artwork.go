@@ -58,12 +58,23 @@ func newArtCache(max int) *artCache {
 	return &artCache{max: max, items: map[string]image.Image{}}
 }
 
+// get and put are nil-safe: artwork is decoration, so a model built without a
+// cache (tests, future entry points) just goes uncached instead of crashing.
 func (c *artCache) get(key string) (image.Image, bool) {
+	if c == nil {
+		return nil, false
+	}
 	img, ok := c.items[key]
 	return img, ok
 }
 
 func (c *artCache) put(key string, img image.Image) {
+	if c == nil || c.max <= 0 {
+		return
+	}
+	if c.items == nil {
+		c.items = map[string]image.Image{}
+	}
 	if _, ok := c.items[key]; ok {
 		return
 	}
@@ -105,6 +116,28 @@ func renderArtwork(img image.Image, w, h int) []string {
 		rows[row] = sb.String()
 	}
 	return rows
+}
+
+// artworkMaxCols keeps the cover from dwarfing the lyrics on tall terminals.
+const artworkMaxCols = 24
+
+// artworkLayout sizes the cover for a lyrics panel of w columns and h rows.
+// Terminal cells are roughly 1:2, so a square needs cols = 2*rows. Returns
+// (0, 0) when the lyrics would be squeezed below minLyrics columns.
+func artworkLayout(w, h, minLyrics int) (cols, rows int) {
+	if w <= 0 || h <= 0 {
+		return 0, 0
+	}
+	rows = h
+	cols = rows * 2
+	if cols > artworkMaxCols {
+		cols = artworkMaxCols
+		rows = cols / 2
+	}
+	if w-cols-1 < minLyrics {
+		return 0, 0
+	}
+	return cols, rows
 }
 
 func hex2(v uint8) string {

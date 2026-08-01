@@ -198,6 +198,10 @@ func configInt(cfg map[string]string, key string, def int) int {
 	return n
 }
 
+// applyAutoTheme re-derives the accent from the current artwork when the
+// "auto" theme is active. Implemented in Task 7.
+func (m *model) applyAutoTheme() {}
+
 // themeFromConfig picks the preset named by the config (falling back to the
 // saved name, then the default) and applies any per-color overrides on top.
 func themeFromConfig(cfg map[string]string, saved string) theme {
