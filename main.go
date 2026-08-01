@@ -17,19 +17,26 @@ import (
 )
 
 const (
-	accent                    = lipgloss.Color("#FA233B") // Apple Music red
-	accentHi                  = lipgloss.Color("#FB5C74") // Apple Music pink
-	accentLo                  = lipgloss.Color("#8A1E30")
-	fgBright                  = lipgloss.Color("#F2F2F7")
-	fgDim                     = lipgloss.Color("#8E8E93")
-	fgFaint                   = lipgloss.Color("#5A5A5E")
-	borderDim                 = lipgloss.Color("#3A3A3C")
-	selBg                     = lipgloss.Color("#2C2C2E")
 	audioInitializingText     = "initializing Apple Music audio…"
 	audioInitializingWarning  = "Apple Music is still initializing · R reload"
 	visualizerUnavailableNote = "visualizer unavailable · simulated"
 	visualizerFrameFreshness  = 400 * time.Millisecond
 )
+
+// The live palette. Mutable because themes swap it at runtime; safe because
+// Bubble Tea runs Update and View on one goroutine.
+var (
+	accent    lipgloss.Color
+	accentHi  lipgloss.Color
+	accentLo  lipgloss.Color
+	fgBright  lipgloss.Color
+	fgDim     lipgloss.Color
+	fgFaint   lipgloss.Color
+	borderDim lipgloss.Color
+	selBg     lipgloss.Color
+)
+
+func init() { applyTheme(themes[0]) }
 
 type phase int
 
