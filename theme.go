@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bufio"
+	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -103,4 +106,121 @@ func saveThemeName(name string) {
 		return
 	}
 	_ = os.WriteFile(p, []byte(name+"\n"), 0o644)
+}
+
+// stripComment removes a trailing `#` comment, ignoring `#` inside double
+// quotes so hex colors like accent = "#FA233B" survive.
+func stripComment(line string) string {
+	inQuotes := false
+	for i := 0; i < len(line); i++ {
+		switch line[i] {
+		case '"':
+			inQuotes = !inQuotes
+		case '#':
+			if !inQuotes {
+				return strings.TrimSpace(line[:i])
+			}
+		}
+	}
+	return strings.TrimSpace(line)
+}
+
+// parseConfig reads a deliberately small TOML subset: `[section]` headers and
+// `key = value` lines, `#` comments, optional quotes around values. Keys come
+// back as "section.key". A hand-rolled parser keeps the module dependency-free.
+// ponytail: no arrays, no nesting, no types — add a real TOML library only if
+// the config actually grows to need them.
+func parseConfig(r io.Reader) map[string]string {
+	out := map[string]string{}
+	section := ""
+	sc := bufio.NewScanner(r)
+	for sc.Scan() {
+		line := stripComment(sc.Text())
+		switch {
+		case line == "":
+		case strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]"):
+			section = strings.TrimSpace(line[1 : len(line)-1])
+		default:
+			k, v, ok := strings.Cut(line, "=")
+			if !ok {
+				continue
+			}
+			k = strings.TrimSpace(k)
+			if k == "" {
+				continue
+			}
+			v = strings.Trim(strings.TrimSpace(v), `"`)
+			if section != "" {
+				k = section + "." + k
+			}
+			out[k] = v
+		}
+	}
+	return out
+}
+
+// loadConfig reads ~/.config/amtui/config.toml. A missing or unreadable file is
+// not an error — the defaults simply stand.
+func loadConfig() map[string]string {
+	d := configDir()
+	if d == "" {
+		return map[string]string{}
+	}
+	f, err := os.Open(filepath.Join(d, "config.toml"))
+	if err != nil {
+		return map[string]string{}
+	}
+	defer f.Close()
+	return parseConfig(f)
+}
+
+func configBool(cfg map[string]string, key string, def bool) bool {
+	v, ok := cfg[key]
+	if !ok {
+		return def
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		return def
+	}
+	return b
+}
+
+func configInt(cfg map[string]string, key string, def int) int {
+	v, ok := cfg[key]
+	if !ok {
+		return def
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return def
+	}
+	return n
+}
+
+// themeFromConfig picks the preset named by the config (falling back to the
+// saved name, then the default) and applies any per-color overrides on top.
+func themeFromConfig(cfg map[string]string, saved string) theme {
+	name := cfg["theme.name"]
+	if name == "" {
+		name = saved
+	}
+	t := themes[0]
+	if found := themeByName(name); found != nil {
+		t = *found
+	}
+	set := func(key string, dst *lipgloss.Color) {
+		if v := cfg["theme."+key]; v != "" {
+			*dst = lipgloss.Color(v)
+		}
+	}
+	set("accent", &t.accent)
+	set("accent_hi", &t.accentHi)
+	set("accent_lo", &t.accentLo)
+	set("fg_bright", &t.fgBright)
+	set("fg_dim", &t.fgDim)
+	set("fg_faint", &t.fgFaint)
+	set("border_dim", &t.borderDim)
+	set("sel_bg", &t.selBg)
+	return t
 }

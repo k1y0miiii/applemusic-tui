@@ -89,7 +89,8 @@ type model struct {
 	focus  int // 0 queue, 1 player
 	selIdx int
 
-	themeName string // active theme, persisted across runs
+	themeName string            // active theme, persisted across runs
+	cfg       map[string]string // parsed config.toml, read once at startup
 
 	statusCh chan string
 
@@ -866,11 +867,10 @@ func (m model) View() string {
 
 func main() {
 	m := model{statusCh: make(chan string, 8), status: "starting…"}
-	m.themeName = themes[0].name
-	if t := themeByName(loadThemeName()); t != nil {
-		m.themeName = t.name
-		applyTheme(*t)
-	}
+	m.cfg = loadConfig()
+	t := themeFromConfig(m.cfg, loadThemeName())
+	m.themeName = t.name
+	applyTheme(t)
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		log.Fatal(err)

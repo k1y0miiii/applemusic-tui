@@ -1,0 +1,26 @@
+# ~/.config/amtui/config.toml — every key is optional.
+
+[theme]
+# apple (default) | catppuccin | gruvbox | nord | mono | auto
+# "auto" takes the accent from the current track's artwork.
+name = "apple"
+
+# Override any individual color. Hex only, and keep the quotes.
+# accent     = "#FA233B"
+# accent_hi  = "#FB5C74"
+# accent_lo  = "#8A1E30"
+# fg_bright  = "#F2F2F7"
+# fg_dim     = "#8E8E93"
+# fg_faint   = "#5A5A5E"
+# border_dim = "#3A3A3C"
+# sel_bg     = "#2C2C2E"
+
+[visualizer]
+peaks = true   # falling peak markers above the spectrum bars
+pulse = true   # accent brightness pulses with the bass
+wave  = true   # progress bar drawn as the played waveform
+
+[artwork]
+enabled = true
+# Hide the cover when fewer than this many columns would be left for lyrics.
+min_lyrics_width = 30
