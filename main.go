@@ -130,6 +130,7 @@ type model struct {
 	vizBands    [32]float64 // smoothed, 0..1
 	vizTargets  [32]float64
 	vizPeaks    [32]float64 // peak-hold markers, decay slowly
+	wv          wave        // recorded loudness across the current track
 
 	// search overlay
 	searchOpen bool
@@ -360,6 +361,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.vizBands = [32]float64{}
 		}
 		decayPeaks(&m.vizPeaks, m.vizBands)
+		if m.st.Dur > 0 && m.st.Playing {
+			m.wv.record(float64(m.st.Pos)/float64(m.st.Dur), bandsLevel(m.vizBands))
+		}
 		if visualizerClose != nil {
 			return m, tea.Batch(tick(), visualizerClose)
 		}
@@ -451,6 +455,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmd = fetchLyricsCmd(id, m.st.Now.Artist, m.st.Now.Title, m.st.Now.Duration)
 			}
 			if id := m.st.Now.ID; id != "" && id != m.artFor {
+				m.wv.reset()
 				m.artFor, m.art = id, nil
 				if cached, ok := m.artCache.get(id); ok {
 					m.art = cached
@@ -577,12 +582,14 @@ func (m model) updateKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "left":
 		if m.focus == 1 {
 			m.st.Pos = max(m.st.Pos-5*time.Second, 0)
+			m.wv.reset()
 			p := m.st.Pos
 			return m, doCmd(func() error { return eng.SeekTo(p) })
 		}
 	case "right":
 		if m.focus == 1 {
 			m.st.Pos = min(m.st.Pos+5*time.Second, m.st.Dur)
+			m.wv.reset()
 			p := m.st.Pos
 			return m, doCmd(func() error { return eng.SeekTo(p) })
 		}
@@ -709,6 +716,61 @@ func decayPeaks(peaks *[32]float64, bands [32]float64) {
 		}
 		peaks[i] = max(peaks[i]-peakDecay, 0)
 	}
+}
+
+// waveBuckets is the resolution of the recorded waveform. Wider than any
+// realistic progress bar, so a resize never loses detail.
+const waveBuckets = 240
+
+// wave records the audio level at each point of the track as it plays, so the
+// progress bar can show the shape of what was already heard.
+type wave struct {
+	samples [waveBuckets]float64
+}
+
+// record stores level at position frac (0..1), keeping the loudest value seen
+// in that bucket.
+func (w *wave) record(frac, level float64) {
+	i := int(frac * waveBuckets)
+	i = min(max(i, 0), waveBuckets-1)
+	if level > w.samples[i] {
+		w.samples[i] = level
+	}
+}
+
+func (w *wave) reset() { w.samples = [waveBuckets]float64{} }
+
+// column returns the peak level for column col of a bar cols wide.
+func (w *wave) column(col, cols int) float64 {
+	if cols <= 0 {
+		return 0
+	}
+	start := col * waveBuckets / cols
+	end := (col + 1) * waveBuckets / cols
+	end = min(max(end, start+1), waveBuckets)
+	peak := 0.0
+	for _, v := range w.samples[start:end] {
+		peak = max(peak, v)
+	}
+	return peak
+}
+
+// bandsLevel is the overall loudness: the mean of all bands.
+func bandsLevel(bands [32]float64) float64 {
+	sum := 0.0
+	for _, v := range bands {
+		sum += v
+	}
+	return sum / float64(len(bands))
+}
+
+// bassLevel is the mean of the four lowest bands — what drives the pulse.
+func bassLevel(bands [32]float64) float64 {
+	sum := 0.0
+	for _, v := range bands[:4] {
+		sum += v
+	}
+	return sum / 4
 }
 
 // simulatedBands is the fallback animation, moved out of vizPanel so the peak
@@ -915,12 +977,31 @@ func (m model) transportPanel(w int) string {
 		frac = min(float64(m.st.Pos)/float64(m.st.Dur), 1)
 	}
 	filled := int(frac * float64(barW))
-	bar := pink.Render(strings.Repeat("━", filled)) +
-		lipgloss.NewStyle().Foreground(borderDim).Render(strings.Repeat("─", barW-filled))
+	bar := m.progressBar(barW, filled)
 	l2 := lipgloss.NewStyle().Foreground(accent).Render(" ▄▄ ") +
 		pink.Render(icon+" ") + dim.Render(times) + bar + dim.Render(timee)
 	line2 := l2 + strings.Repeat(" ", max(1, w-lipgloss.Width(l2)-lipgloss.Width(r2))) + r2
 	return pad(line1, w) + "\n" + pad(line2, w)
+}
+
+// progressBar draws the played part of the track as the recorded waveform and
+// the rest as a flat rule. Falls back to a plain filled bar when the waveform
+// is disabled in the config.
+func (m model) progressBar(barW, filled int) string {
+	rest := lipgloss.NewStyle().Foreground(borderDim).
+		Render(strings.Repeat("─", max(0, barW-filled)))
+	if !configBool(m.cfg, "visualizer.wave", true) {
+		return lipgloss.NewStyle().Foreground(accentHi).
+			Render(strings.Repeat("━", filled)) + rest
+	}
+	steps := []rune("▁▂▃▄▅▆▇█")
+	st := lipgloss.NewStyle().Foreground(accentHi)
+	var b strings.Builder
+	for c := 0; c < filled; c++ {
+		lvl := m.wv.column(c, barW)
+		b.WriteString(st.Render(string(steps[min(int(lvl*float64(len(steps))), len(steps)-1)])))
+	}
+	return b.String() + rest
 }
 
 func (m model) bootView() string {

@@ -65,3 +65,76 @@ func TestSimulatedBandsCollapseWhenPaused(t *testing.T) {
 		t.Errorf("paused bands (%.2f) did not collapse below playing (%.2f)", pausedSum, playingSum)
 	}
 }
+
+func TestWaveRecordsAtTheRightBucket(t *testing.T) {
+	var w wave
+	w.record(0.0, 0.5)
+	if w.samples[0] != 0.5 {
+		t.Errorf("samples[0] = %.2f, want 0.50", w.samples[0])
+	}
+	w.record(1.0, 0.7) // frac 1.0 must clamp into the last bucket, not overflow
+	if w.samples[waveBuckets-1] != 0.7 {
+		t.Errorf("samples[last] = %.2f, want 0.70", w.samples[waveBuckets-1])
+	}
+	w.record(0.5, 0.3)
+	if w.samples[waveBuckets/2] != 0.3 {
+		t.Errorf("samples[mid] = %.2f, want 0.30", w.samples[waveBuckets/2])
+	}
+}
+
+func TestWaveKeepsThePeakPerBucket(t *testing.T) {
+	var w wave
+	w.record(0.25, 0.4)
+	w.record(0.25, 0.9)
+	w.record(0.25, 0.2)
+	if w.samples[waveBuckets/4] != 0.9 {
+		t.Errorf("bucket = %.2f, want the peak 0.90", w.samples[waveBuckets/4])
+	}
+}
+
+func TestWaveResetClears(t *testing.T) {
+	var w wave
+	w.record(0.5, 0.8)
+	w.reset()
+	for i, v := range w.samples {
+		if v != 0 {
+			t.Fatalf("samples[%d] = %.2f after reset, want 0", i, v)
+		}
+	}
+}
+
+func TestWaveColumnAggregatesRange(t *testing.T) {
+	var w wave
+	w.record(0.0, 0.2)
+	w.record(0.01, 0.6)
+	// The first of 10 columns spans buckets 0..waveBuckets/10, so it must
+	// report the peak of both samples.
+	if got := w.column(0, 10); got != 0.6 {
+		t.Errorf("column(0,10) = %.2f, want 0.60", got)
+	}
+}
+
+func TestBandsLevelIsMean(t *testing.T) {
+	var bands [32]float64
+	for i := range bands {
+		bands[i] = 0.5
+	}
+	if got := bandsLevel(bands); math.Abs(got-0.5) > 1e-9 {
+		t.Errorf("bandsLevel() = %.4f, want 0.5", got)
+	}
+}
+
+func TestBassLevelUsesLowBandsOnly(t *testing.T) {
+	var bands [32]float64
+	bands[0], bands[1], bands[2], bands[3] = 1, 1, 1, 1
+	if got := bassLevel(bands); math.Abs(got-1) > 1e-9 {
+		t.Errorf("bassLevel(low=1) = %.4f, want 1", got)
+	}
+	var high [32]float64
+	for i := 8; i < 32; i++ {
+		high[i] = 1
+	}
+	if got := bassLevel(high); got != 0 {
+		t.Errorf("bassLevel(high only) = %.4f, want 0", got)
+	}
+}
