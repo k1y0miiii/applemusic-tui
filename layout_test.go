@@ -42,36 +42,43 @@ func TestLayoutFits(t *testing.T) {
 		{live: true, source: "PIPEWIRE"},
 		{},
 	}
+	recents := [][]engine.Track{nil, demoRecent(7)}
 	for _, s := range sizes {
 		for _, searchOpen := range []bool{false, true} {
 			for _, visualizer := range visualizers {
-				m := model{
-					w: s[0], h: s[1], phase: phaseReady, st: demoState(),
-					t:          1.7,
-					searchOpen: searchOpen,
-					sQuery:     "daft punk",
-					vizOpening: visualizer.opening,
-					vizLive:    visualizer.live,
-					vizSource:  visualizer.source,
-				}
-				v := m.View()
-				lines := strings.Split(v, "\n")
-				maxw := 0
-				for _, l := range lines {
-					if lw := lipgloss.Width(l); lw > maxw {
-						maxw = lw
+				for _, recent := range recents {
+					m := model{
+						w: s[0], h: s[1], phase: phaseReady, st: demoState(),
+						t:          1.7,
+						searchOpen: searchOpen,
+						sQuery:     "daft punk",
+						recent:     recent,
+						focus:      focusRecent,
+						recentSel:  3,
+						vizOpening: visualizer.opening,
+						vizLive:    visualizer.live,
+						vizSource:  visualizer.source,
 					}
-				}
-				if maxw > s[0] || len(lines) > s[1] {
-					t.Errorf(
-						"term %dx%d search=%v visualizer=%q -> render %dx%d overflows",
-						s[0],
-						s[1],
-						searchOpen,
-						m.visualizerTitle(),
-						maxw,
-						len(lines),
-					)
+					v := m.View()
+					lines := strings.Split(v, "\n")
+					maxw := 0
+					for _, l := range lines {
+						if lw := lipgloss.Width(l); lw > maxw {
+							maxw = lw
+						}
+					}
+					if maxw > s[0] || len(lines) > s[1] {
+						t.Errorf(
+							"term %dx%d search=%v recent=%d visualizer=%q -> render %dx%d overflows",
+							s[0],
+							s[1],
+							searchOpen,
+							len(recent),
+							m.visualizerTitle(),
+							maxw,
+							len(lines),
+						)
+					}
 				}
 			}
 		}

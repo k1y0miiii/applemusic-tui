@@ -36,6 +36,8 @@ which changes what is possible:
 - **Full Apple Music catalog** — search songs, albums and playlists, plus your
   recently played, straight from MusicKit.
 - **Queue** — jump to any track, append to queue, play next.
+- **Recently played** — a cover grid under the queue: your last ten albums,
+  playlists and singles as half-block artwork, arrow keys to pick, `↵` to play.
 - **Live visualizer** — a Winamp-style spectrum of what is actually playing:
   system-audio PCM through a 4096-sample Hann-window FFT into 32 bands
   (denser at low frequencies), 30 fps. CoreAudio process tap on macOS,
@@ -156,10 +158,10 @@ Run the test suite with `make test`, or `make verify` for the full check.
 | --- | --- |
 | `Space` | Play / pause |
 | `n` / `p` | Next / previous track |
-| `Tab` | Switch focus: queue ⇄ transport |
-| `j` `k` / `↓` `↑` | Queue: move selection · Transport: volume down / up |
-| `Enter` | Play the selected queue track |
-| `←` / `→` | Seek −5 s / +5 s (transport focused) |
+| `Tab` | Cycle focus: queue → recently played → transport |
+| `j` `k` / `↓` `↑` | Queue: move selection · Recent: move a grid row · Transport: volume down / up |
+| `Enter` | Play the selected queue track or recently-played cover |
+| `←` / `→` | Recent: previous / next cover · Transport: seek −5 s / +5 s |
 | `s` | Toggle shuffle |
 | `r` | Cycle repeat mode |
 | `t` | Cycle color theme |

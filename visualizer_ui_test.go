@@ -121,15 +121,15 @@ func TestReadyStartsVisualizerOpenAlongsideInitialStateFetch(t *testing.T) {
 		t.Fatal("ready should mark the visualizer as opening")
 	}
 	if cmd == nil {
-		t.Fatal("ready should return state-fetch and visualizer-open commands")
+		t.Fatal("ready should return state-fetch, library and visualizer-open commands")
 	}
 	msg := invokeCommandWithoutPanic(cmd)
 	batch, ok := msg.(tea.BatchMsg)
 	if !ok {
 		t.Fatalf("ready command returned %T, want tea.BatchMsg", msg)
 	}
-	if len(batch) != 2 {
-		t.Fatalf("ready batch contains %d commands, want 2", len(batch))
+	if len(batch) != 3 {
+		t.Fatalf("ready batch contains %d commands, want 3", len(batch))
 	}
 }
 

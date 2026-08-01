@@ -374,6 +374,8 @@ const libraryJS = `(async () => {
     title: (x.attributes && x.attributes.name) || '',
     artist: (x.attributes && (x.attributes.artistName || x.attributes.curatorName)) || '',
     album: '', durMs: 0,
+    // Template URL with {w}/{h} placeholders; the Go side picks the size.
+    art: (x.attributes && x.attributes.artwork && x.attributes.artwork.url) || '',
   });
   const rec = recent.map((x) => {
     const t = x.type || '';
