@@ -24,8 +24,11 @@ legally, amtui just gives it a terminal face.
   PipeWire/PulseAudio monitor on Linux. Falls back to a clearly labeled
   simulated animation when live capture is unavailable.
 - **Synced lyrics** — timestamped lines from [LRCLIB](https://lrclib.net),
-  no API keys.
-- **Transport** — play/pause, next/prev, seek, volume, shuffle, repeat.
+  no API keys, with the album cover rendered beside them in half-block color.
+- **Themes** — six built-in palettes cycled with `t`, overridable per color in
+  a config file, plus an `auto` mode that pulls the accent from the artwork.
+- **Transport** — play/pause, next/prev, seek, volume, shuffle, repeat, and a
+  progress bar drawn as the waveform of what you have already heard.
 - **Safe sign-in** — you log in inside a real browser window; your Apple ID
   credentials never touch the terminal.
 
@@ -111,6 +114,7 @@ Run the test suite with `make test`, or `make verify` for the full check.
 | `←` / `→` | Seek −5 s / +5 s (transport focused) |
 | `s` | Toggle shuffle |
 | `r` | Cycle repeat mode |
+| `t` | Cycle color theme |
 | `R` | Reload the web player if it wedges |
 | `/` | Open search |
 | `q` / `Ctrl+C` | Quit |
@@ -129,11 +133,27 @@ Run the test suite with `make test`, or `make verify` for the full check.
 <p align="center"><img src="docs/media/search.png" alt="Search overlay" width="800"></p>
 <p align="center"><img src="docs/media/lyrics.png" alt="Queue, live visualizer and synced lyrics" width="800"></p>
 
+## Themes
+
+Six built-in themes: `apple` (default), `catppuccin`, `gruvbox`, `nord`, `mono`
+and `auto`. Press `t` to cycle them; the choice is remembered in
+`~/.config/amtui/theme`.
+
+`auto` takes its accent from the dominant color of the current track's album
+art. Only the accent changes — background and text stay neutral, so no cover can
+make the interface unreadable.
+
+To pick a theme up front or override individual colors, copy
+[`docs/config.example.toml`](docs/config.example.toml) to
+`~/.config/amtui/config.toml`. The same file switches the peak markers, the bass
+pulse, the waveform progress bar and the album art on or off.
+
 ## Configuration
 
 | Environment variable | Effect |
 | --- | --- |
 | `AMTUI_CHROME` | Path to the Chrome/Chromium binary (overrides auto-detection) |
+| `AMTUI_CONFIG_DIR` | Config directory (default `~/.config/amtui`) |
 | `AMTUI_DEBUG` | Run the browser visibly, with verbose logging |
 
 ## License
