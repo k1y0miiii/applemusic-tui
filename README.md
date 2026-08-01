@@ -1,4 +1,4 @@
-# applemusic-tui
+# applemusic-tui — Apple Music in your terminal, on macOS **and** Linux
 
 **English** · [Русский](README.ru.md)
 
@@ -6,12 +6,30 @@
 ![Platforms](https://img.shields.io/badge/platforms-macOS%20%C2%B7%20Linux-555?style=flat-square)
 ![License: MIT](https://img.shields.io/badge/license-MIT-555?style=flat-square)
 
-Apple Music in your terminal. `amtui` is a Bubble Tea TUI that drives the real
-Apple Music web player inside a hidden Chromium — full catalog, real playback,
-live audio visualizer, synced lyrics. No DRM hacks: the browser plays the audio
-legally, amtui just gives it a terminal face.
+`amtui` is a terminal Apple Music player — a full TUI client with catalog
+search, a live audio spectrum visualizer and synced lyrics, running on **Linux
+as well as macOS**. It drives the official Apple Music web player inside a
+hidden Chromium, so playback is the real thing. No DRM hacks: the browser plays
+the audio legally, amtui just gives it a terminal face.
 
 <p align="center"><img src="docs/media/demo.gif" alt="amtui — Apple Music in the terminal" width="800"></p>
+
+## Why amtui
+
+Terminal Apple Music clients are usually AppleScript remotes for the macOS
+Music.app: Mac-only, and limited to steering an app that has to be running
+anyway. amtui talks to Apple Music's **web** player through MusicKit instead,
+which changes what is possible:
+
+- **Linux, not just macOS.** The same Go binary runs on both. (Linux support is
+  newer — see the note under [Requirements](#requirements).)
+- **The full catalog, in the terminal.** Search songs, albums and playlists
+  straight from MusicKit — no desktop app in the loop.
+- **A real spectrum visualizer.** Actual system-audio PCM through an FFT, not a
+  decorative animation.
+- **Synced lyrics** from LRCLIB, with the album cover rendered next to them.
+- **Your credentials stay out of the terminal.** You sign in inside a real
+  browser window, so 2FA and captcha just work.
 
 ## Features
 
@@ -50,6 +68,8 @@ One Go binary. It spawns a hidden Chromium with a persistent profile in
 `~/.config/amtui/chrome` and talks to `window.MusicKit` in page context —
 search, queue, play/pause, seek, now playing. No DOM scraping. Audio goes out
 through the system mixer (the web player serves AAC 256; no lossless).
+
+<a id="requirements"></a>
 
 ## Requirements
 
