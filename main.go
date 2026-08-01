@@ -790,7 +790,7 @@ func (m model) queuePanel(w, h int) string {
 		dur := lipgloss.NewStyle().Foreground(fgFaint).Render(fmtTime(tr.Duration))
 		gap := w - lipgloss.Width(left) - lipgloss.Width(dur) - 1
 		line := left + strings.Repeat(" ", max(1, gap)) + dur
-		if m.focus == 0 && i == m.selIdx {
+		if m.focus == focusQueue && i == m.selIdx {
 			line = lipgloss.NewStyle().Background(selBg).Render(pad(line, w))
 		}
 		b.WriteString(pad(line, w) + "\n")
@@ -826,27 +826,29 @@ func (m model) recentPanel(w, h int) string {
 	if len(m.recent) == 0 {
 		return centeredRows(faint.Render(" nothing played yet"), w, rows)
 	}
-	const gap = 2
-	tileW := (w - (recentCols-1)*gap) / recentCols
 	// Covers are square in half-block cells: two columns per row. Start from the
-	// height available and shrink to the tile width if that is the tighter bound.
+	// height available and shrink if the width is the tighter bound.
+	const minGap = 2
 	artRows := rows - 2 // two text lines under every cover
 	artCols := artRows * 2
-	if artCols > tileW {
-		artCols = tileW - tileW%2
+	if maxCols := (w - (recentCols+1)*minGap) / recentCols; artCols > maxCols {
+		artCols = maxCols - maxCols%2
 		artRows = artCols / 2
 	}
-	if tileW < 6 || artRows < 2 {
+	if artCols < 6 || artRows < 2 {
 		return centeredRows(faint.Render(" pane too narrow for covers"), w, rows)
 	}
+	// Tiles are exactly as wide as their cover, so a caption never sticks out
+	// past the artwork above it. The slack spreads into equal margins at both
+	// edges and between the tiles, which centers the row in the panel.
+	tileW := artCols
+	gap := (w - recentCols*artCols) / (recentCols + 1)
 
 	start := m.recentSel / recentCols * recentCols
 	grid := make([]string, artRows+2)
 	for c := 0; c < recentCols; c++ {
-		if c > 0 {
-			for r := range grid {
-				grid[r] += strings.Repeat(" ", gap)
-			}
+		for r := range grid {
+			grid[r] += strings.Repeat(" ", gap)
 		}
 		i := start + c
 		if i >= len(m.recent) {
@@ -865,7 +867,7 @@ func (m model) recentPanel(w, h int) string {
 			if r < len(cover) {
 				line = cover[r]
 			}
-			grid[r] += pad(line, tileW) // covers hug the left edge, like their captions
+			grid[r] += pad(line, tileW)
 		}
 		ts, as, mark := lipgloss.NewStyle().Foreground(fgDim), faint, " "
 		if m.focus == focusRecent && i == m.recentSel {
@@ -1215,7 +1217,7 @@ func (m model) transportPanel(w int) string {
 
 	volSegs := (m.st.Volume + 9) / 17 // 0..6 segments
 	volSt := faint
-	if m.focus == 1 {
+	if m.focus == focusPlayer {
 		volSt = pink
 	}
 	shuf, rep := "off", [3]string{"off", "one", "all"}[min(m.st.Repeat, 2)]

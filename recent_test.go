@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 
 	"github.com/k1y0miiii/applemusic-tui/engine"
 )
@@ -111,6 +112,34 @@ func TestRecentGridDoesNotStealPlayerKeys(t *testing.T) {
 	if got := next.(model); got.st.Volume != 55 || got.recentSel != 0 {
 		t.Fatalf("up with player focused: volume=%d sel=%d, want 55 and 0",
 			got.st.Volume, got.recentSel)
+	}
+}
+
+// The transport highlights volume only for the player. Focusing the grid must
+// not light it up just because recent now sits at the index player used to have.
+func TestVolumeHighlightFollowsPlayerOnly(t *testing.T) {
+	// Styles are no-ops without a color profile, which would make every focus
+	// render identically.
+	defer lipgloss.SetColorProfile(lipgloss.ColorProfile())
+	lipgloss.SetColorProfile(termenv.TrueColor)
+
+	volSegs := (demoState().Volume + 9) / 17
+	lit := lipgloss.NewStyle().Foreground(accentHi).
+		Render(strings.Repeat("▮", volSegs) + strings.Repeat("▯", 6-volSegs))
+
+	for _, tc := range []struct {
+		focus int
+		want  bool
+	}{
+		{focusQueue, false},
+		{focusRecent, false},
+		{focusPlayer, true},
+	} {
+		m := recentModel()
+		m.focus = tc.focus
+		if got := strings.Contains(m.transportPanel(m.w-2), lit); got != tc.want {
+			t.Errorf("focus %d: volume highlighted = %v, want %v", tc.focus, got, tc.want)
+		}
 	}
 }
 
