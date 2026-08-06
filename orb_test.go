@@ -117,7 +117,7 @@ func TestVizModeRoundTrips(t *testing.T) {
 func TestSpherePanelFillsExactlyTheGivenBox(t *testing.T) {
 	for _, size := range [][2]int{{60, 18}, {24, 8}, {120, 40}} {
 		w, h := size[0], size[1]
-		lines := strings.Split(spherePanel(w, h, 0.8, 0.6, fullBands(0.5)), "\n")
+		lines := strings.Split(spherePanel(w, h, 0.8, 0.6, 0.5, fullBands(0.5)), "\n")
 		if len(lines) != h {
 			t.Fatalf("spherePanel(%d,%d) drew %d rows, want %d", w, h, len(lines), h)
 		}
@@ -165,7 +165,7 @@ func TestSphereStaysSeeThrough(t *testing.T) {
 	lipgloss.SetColorProfile(termenv.Ascii)
 
 	w, h := 60, 18
-	out := spherePanel(w, h, 0.8, 0.6, fullBands(0.4))
+	out := spherePanel(w, h, 0.8, 0.6, 0.5, fullBands(0.4))
 	lit := 0
 	for _, row := range strings.Split(out, "\n") {
 		lit += w - strings.Count(row, " ")
@@ -225,27 +225,19 @@ func TestVizModeUpgradesTheOldOrbName(t *testing.T) {
 	}
 }
 
-func TestSpherePumpsVisiblyOnBass(t *testing.T) {
+func TestSpherePumpsVisiblyOnTheBeat(t *testing.T) {
 	// Sizing the projection from the globe's current radius refits it every
 	// frame and divides the swell straight back out: the math pumps, the screen
-	// does not move.
-	//
-	// Only the four lowest bands move between the two frames, and every other
-	// band is pinned at full. That holds the loudest band and the radius at the
-	// poles fixed, so the height the globe reaches can only change through the
-	// bass swell — under a refit the two frames come out the same height.
+	// does not move. The spectrum is held identical across both frames, so the
+	// height can only answer the kick.
 	defer lipgloss.SetColorProfile(lipgloss.ColorProfile())
 	lipgloss.SetColorProfile(termenv.Ascii)
 
-	height := func(bass float64) int {
-		bands := fullBands(1)
-		for i := 0; i < 4; i++ { // bassLevel reads the four lowest bands
-			bands[i] = bass
-		}
+	height := func(kick float64) int {
 		rows := 0
 		// Tall enough that a full kick still has headroom; clipping at the panel
 		// edge would cap both frames at the same height and hide the difference.
-		for _, row := range strings.Split(spherePanel(60, 24, 0.8, 0.6, bands), "\n") {
+		for _, row := range strings.Split(spherePanel(60, 24, 0.8, 0.6, kick, fullBands(0.5)), "\n") {
 			if strings.TrimSpace(row) != "" {
 				rows++
 			}
@@ -253,12 +245,51 @@ func TestSpherePumpsVisiblyOnBass(t *testing.T) {
 		return rows
 	}
 
-	// A refit does not cancel the swell exactly — the corrugation still shifts a
-	// row or so — so this asks for a swell worth looking at, not merely one with
-	// the right sign.
-	quiet, loud := height(0), height(1)
-	if loud-quiet < quiet/4 {
-		t.Fatalf("globe is %d rows tall silent and %d on a full kick, a %d-row swell — the pump is scaled away",
-			quiet, loud, loud-quiet)
+	rest, beat := height(0), height(1)
+	if beat-rest < rest/4 {
+		t.Fatalf("globe is %d rows tall at rest and %d on a full kick, a %d-row swell — the pump is scaled away",
+			rest, beat, beat-rest)
+	}
+}
+
+func TestBassKickRestsOnSteadyBassAndSpikesOnAHit(t *testing.T) {
+	// The whole point of measuring the overshoot: a loud but steady low end is
+	// not a beat. Driving the pump from the level itself parks the globe at one
+	// size, which is what this guards against.
+	base, kick := 0.0, 0.0
+	for i := 0; i < 300; i++ {
+		base, kick = bassKick(base, kick, 0.7) // loud, and utterly flat
+	}
+	if kick > 0.05 {
+		t.Fatalf("steady bass settled at kick %.3f, want it to fall back to rest", kick)
+	}
+
+	beforeBase := base
+	_, hit := bassKick(base, kick, 0.82) // a kick 0.12 above the sustained level
+	if hit < 0.3 {
+		t.Errorf("a hit 0.12 over the baseline produced kick %.3f, too weak to see", hit)
+	}
+	if hit > 1 {
+		t.Errorf("kick %.3f exceeds 1 and would overdrive the swell", hit)
+	}
+
+	// And it has to fall away again, or every beat leaves the globe inflated.
+	base, decayed := beforeBase, hit
+	for i := 0; i < 15; i++ { // half a second at 30 fps
+		base, decayed = bassKick(base, decayed, 0.7)
+	}
+	if decayed >= hit/2 {
+		t.Errorf("kick only fell from %.3f to %.3f in half a second, want a sharper drop",
+			hit, decayed)
+	}
+}
+
+func TestBassKickStaysInRange(t *testing.T) {
+	base, kick := 0.0, 0.0
+	for i, bass := range []float64{0, 1, 1, 0, 0.5, 1, 0, 0, 1, 0.2, 0.9, 0} {
+		base, kick = bassKick(base, kick, bass)
+		if kick < 0 || kick > 1 {
+			t.Fatalf("step %d: kick %.3f outside 0..1", i, kick)
+		}
 	}
 }

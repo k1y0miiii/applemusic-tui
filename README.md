@@ -199,8 +199,14 @@ Press `v` to cycle three shapes; the choice is remembered in
 
 The two 3D shapes answer the beat differently. The torus answers with motion: a
 bass kick speeds its spin up. The sphere answers with size — it turns at about a
-third of that pace and instead swells and contracts on the bass, so the pump is
+third of that pace and instead swells and contracts on the beat, so the pump is
 what you watch rather than the rotation.
+
+Both read the beat as how far the low end rises above its own running average,
+not as how loud it is. The bands are normalized over a 63 dB window, so a kick
+riding 6 dB above the sustained bass moves the absolute number by a tenth and
+across a track the low end sits high and nearly flat — driving anything from it
+leaves the shape sitting still.
 
 The bars do neither; they are the spectrum itself. Independent of the mode, the
 panel borders pulse with the bass — `visualizer.pulse` turns that off.

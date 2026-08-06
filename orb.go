@@ -33,6 +33,45 @@ const (
 	vizModes
 )
 
+const (
+	kickMemory  = 0.03 // how fast the baseline forgets a beat, per 1/30s tick
+	kickCatchUp = 0.25 // how fast it follows a change of level instead
+	kickJump    = 0.25 // a rise bigger than this is a level change, not a beat
+	kickGain    = 9.0  // overshoot needed for a full-strength kick
+	kickFloor   = 0.02 // ripple below this is not a beat, just the mix breathing
+	kickDecay   = 0.85 // how fast a kick falls away between beats
+)
+
+// bassKick turns the bass level into a beat. Driving anything from the level
+// itself does not work: the bands are normalized over a 63 dB window, so a kick
+// riding 6 dB above the sustained bass moves the number by a tenth, and across a
+// whole track the low end sits high and nearly flat. What reads as a beat is the
+// overshoot above the running average, which rests at zero and spikes on a hit.
+//
+// The baseline has to be slow, or it swallows the very beat it is there to
+// measure — a hit lasts about eight frames once the analyzer's release and the
+// UI smoothing have had their say, so the average must remember far longer than
+// that. But a slow average also needs three seconds to climb from silence when
+// a track starts, and until it arrives every frame reads as one huge beat. So a
+// big step is treated as what it is, a change of level rather than a beat, and
+// followed quickly; the same goes for the bass falling away.
+//
+// Returns the updated baseline and kick. Instant to rise, quick to fall.
+func bassKick(baseline, kick, bass float64) (float64, float64) {
+	gap := bass - baseline
+	memory := kickMemory
+	if gap > kickJump || gap < 0 {
+		memory = kickCatchUp
+	}
+	baseline += gap * memory
+
+	kick *= kickDecay
+	if over := kickGain * (bass - baseline - kickFloor); over > kick {
+		kick = math.Min(1, over)
+	}
+	return baseline, math.Max(0, kick)
+}
+
 // orbAdvance moves the two angles on one 1/30s tick. The spin has a steady base
 // speed plus a kick on the bass — that kick is what makes it read as turning
 // *to* the beat rather than just turning. The wobble tilts the axis, so the
@@ -183,7 +222,7 @@ const (
 	sphereSamples  = 400  // points traced along every ring and meridian
 	sphereDepth    = 4.0  // viewer distance
 	sphereBulge    = 0.30 // per-band corrugation
-	sphereSwell    = 0.45 // how far the bass pumps the whole globe
+	sphereSwell    = 0.55 // how far the bass pumps the whole globe
 	sphereSpin     = 0.35 // the globe turns slower than the torus
 
 	// The projection is sized from the largest the globe can ever be, not from
@@ -209,7 +248,7 @@ func sphereShade(z, extent float64) int {
 	return max(0, min(len(orbRamp)-1, int(near*near*float64(len(orbRamp)))))
 }
 
-func spherePanel(w, h int, spin, wobble float64, bands [32]float64) string {
+func spherePanel(w, h int, spin, wobble, kick float64, bands [32]float64) string {
 	if w < 4 || h < 2 {
 		return strings.Repeat(" ", max(0, w))
 	}
@@ -218,8 +257,8 @@ func spherePanel(w, h int, spin, wobble float64, bands [32]float64) string {
 	sinTilt, cosTilt := math.Sincos(tilt)
 	sinSpin, cosSpin := math.Sincos(spin * sphereSpin)
 
-	// The bass pumps the globe rather than turning it: this one is the pulse.
-	breathe := 1 + sphereSwell*bassLevel(bands)
+	// The beat pumps the globe rather than turning it: this one is the pulse.
+	breathe := 1 + sphereSwell*max(0, min(1, kick))
 	// Shade against the loudest band actually present, not the theoretical
 	// maximum: otherwise quiet passages only ever use the bottom of the light
 	// ramp and the near face never lights up.

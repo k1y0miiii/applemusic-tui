@@ -142,8 +142,10 @@ type model struct {
 	vizTargets  [32]float64
 	vizPeaks    [32]float64 // peak-hold markers, decay slowly
 	vizMode     int         // vizBars or vizOrb, persisted across runs
-	orbSpin     float64     // torus rotation, accelerated by the bass
+	orbSpin     float64     // torus rotation, accelerated by the beat
 	orbWobble   float64     // torus tilt oscillation
+	orbKick     float64     // 0..1 beat strength, spikes on a bass hit
+	orbKickBase float64     // running average the kick is measured against
 	wv          wave        // recorded loudness across the current track
 
 	// search overlay
@@ -410,7 +412,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.vizBands = [32]float64{}
 		}
 		decayPeaks(&m.vizPeaks, m.vizBands)
-		m.orbSpin, m.orbWobble = orbAdvance(m.orbSpin, m.orbWobble, bassLevel(m.vizBands))
+		m.orbKickBase, m.orbKick = bassKick(m.orbKickBase, m.orbKick, bassLevel(m.vizBands))
+		m.orbSpin, m.orbWobble = orbAdvance(m.orbSpin, m.orbWobble, m.orbKick)
 		if m.st.Dur > 0 && m.st.Playing {
 			m.wv.record(float64(m.st.Pos)/float64(m.st.Dur), bandsLevel(m.vizBands))
 		}
@@ -1023,7 +1026,7 @@ func (m model) vizPanel(w, h int) string {
 	case vizTorus:
 		return orbPanel(w, h-1, m.orbSpin, m.orbWobble, m.vizBands)
 	case vizSphere:
-		return spherePanel(w, h-1, m.orbSpin, m.orbWobble, m.vizBands)
+		return spherePanel(w, h-1, m.orbSpin, m.orbWobble, m.orbKick, m.vizBands)
 	}
 	rows, bars := h-1, max(1, w/3)
 	heights := liveBarHeights(m.vizBands, bars, rows)
