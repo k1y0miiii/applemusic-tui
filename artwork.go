@@ -6,6 +6,7 @@ import (
 	_ "image/jpeg" // Apple serves JPEG artwork
 	_ "image/png"  // …but decode PNG too rather than fail
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -20,15 +21,32 @@ const artworkPx = 128
 // artworkTimeout bounds the cover fetch; artwork is decoration, never a stall.
 const artworkTimeout = 5 * time.Second
 
-// artworkURL fills MusicKit's {w}/{h} placeholders. An empty template stays
-// empty so callers can treat "" as "no artwork".
+// artworkPlaceholder matches anything still in braces after the substitutions
+// below.
+var artworkPlaceholder = regexp.MustCompile(`\{[^{}]*\}`)
+
+// artworkURL fills MusicKit's placeholders. An empty template stays empty so
+// callers can treat "" as "no artwork".
+//
+// Apple hands out two shapes of template: `{w}x{h}bb.jpg`, with the crop code
+// and format already baked in, and `{w}x{h}{c}.{f}`, where both are left to the
+// caller. Filling only {w}, {h} and {f} leaves a literal {c} in the URL, and
+// mzstatic answers that with 400 and a JSON body — which decodes to no image,
+// so the cover silently comes up blank while the baked-in ones work.
+//
+// Any leftover placeholder is dropped rather than guessed at: Apple serves
+// `128x128.jpg` with no crop code perfectly well, so removing an unknown one
+// yields a URL that works, and a placeholder Apple adds later fails the same
+// safe way instead of 400ing.
 func artworkURL(template string, px int) string {
 	if template == "" {
 		return ""
 	}
 	s := strconv.Itoa(px)
+	// {f} is replaced rather than dropped — losing it would leave a URL ending
+	// in a bare dot.
 	r := strings.NewReplacer("{w}", s, "{h}", s, "{f}", "jpg")
-	return r.Replace(template)
+	return artworkPlaceholder.ReplaceAllString(r.Replace(template), "")
 }
 
 func fetchArtwork(ctx context.Context, url string) (image.Image, error) {

@@ -144,3 +144,40 @@ func TestLyricsCoverSitsLeftOfTheText(t *testing.T) {
 		}
 	}
 }
+
+func TestArtworkURLFillsAppleSecondTemplateShape(t *testing.T) {
+	// Apple hands out two shapes. The one with the crop code and format left to
+	// the caller was not handled: {c} survived into the URL and mzstatic
+	// answered 400 with JSON, which decodes to no image — so those covers came
+	// up blank while the baked-in ones worked.
+	got := artworkURL("https://example.com/img/{w}x{h}{c}.{f}", 128)
+	if strings.ContainsAny(got, "{}") {
+		t.Fatalf("artworkURL left a placeholder in %q", got)
+	}
+	if want := "https://example.com/img/128x128.jpg"; got != want {
+		t.Errorf("artworkURL = %q, want %q", got, want)
+	}
+}
+
+func TestArtworkURLLeavesNoPlaceholderBehind(t *testing.T) {
+	// Whatever Apple adds next must degrade to a URL that still loads, not to a
+	// 400. Every one of these is a real or plausible template shape.
+	for _, template := range []string{
+		"https://example.com/{w}x{h}bb.jpg",
+		"https://example.com/{w}x{h}{c}.{f}",
+		"https://example.com/{w}x{h}{c}bb.{f}",
+		"https://example.com/{w}x{h}{unknown}.{f}",
+		"https://example.com/{w}x{h}.jpg",
+	} {
+		got := artworkURL(template, 64)
+		if strings.ContainsAny(got, "{}") {
+			t.Errorf("%q -> %q still carries a placeholder", template, got)
+		}
+		if !strings.Contains(got, "64x64") {
+			t.Errorf("%q -> %q lost the size", template, got)
+		}
+		if strings.HasSuffix(got, ".") {
+			t.Errorf("%q -> %q ends in a bare dot", template, got)
+		}
+	}
+}
