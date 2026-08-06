@@ -30,8 +30,17 @@ jobs:
       # The engine tests drive a real headless Chrome through CDP and have no
       # skip guard, so the runner needs a browser. Gating the release on them is
       # deliberate: shipping an unverified binary is the worse failure.
+      # --no-quarantine is gone from brew, and passing it aborts the step before
+      # anything is installed. It is not needed either: Homebrew no longer
+      # quarantines casks, which is why the flag went away. Skip the install
+      # altogether when the runner image already ships Chrome.
       - name: Install Chrome for the engine tests
-        run: brew install --cask --no-quarantine google-chrome
+        run: |
+          if [ -d "/Applications/Google Chrome.app" ]; then
+            echo "Chrome already present on the runner"
+          else
+            brew install --cask google-chrome
+          fi
 
       - name: Verify before shipping
         run: make vet test
