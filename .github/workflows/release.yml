@@ -76,12 +76,24 @@ jobs:
           name: amtui-${{ steps.v.outputs.version }}
           path: dist/
 
+      # Idempotent on purpose. Hosted macOS runners are scarce enough that a
+      # release can end up published from a local build while the tag's run is
+      # still queued, and a re-run of a green build should not fail either. So
+      # create the release if it is missing, and otherwise refresh its files.
+      #
+      # Notes are only generated when the release is being created here; an
+      # existing one keeps whatever notes it was published with.
       - name: Publish the release
         if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" \
-            --title "amtui ${GITHUB_REF_NAME}" \
-            --generate-notes \
-            dist/*
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            echo "${GITHUB_REF_NAME} already published; refreshing its artifacts"
+            gh release upload "${GITHUB_REF_NAME}" dist/* --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" \
+              --title "amtui ${GITHUB_REF_NAME}" \
+              --generate-notes \
+              dist/*
+          fi
