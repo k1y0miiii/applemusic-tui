@@ -141,6 +141,9 @@ type model struct {
 	vizBands    [32]float64 // smoothed, 0..1
 	vizTargets  [32]float64
 	vizPeaks    [32]float64 // peak-hold markers, decay slowly
+	vizMode     int         // vizBars or vizOrb, persisted across runs
+	orbSpin     float64     // torus rotation, accelerated by the bass
+	orbWobble   float64     // torus tilt oscillation
 	wv          wave        // recorded loudness across the current track
 
 	// search overlay
@@ -407,6 +410,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.vizBands = [32]float64{}
 		}
 		decayPeaks(&m.vizPeaks, m.vizBands)
+		m.orbSpin, m.orbWobble = orbAdvance(m.orbSpin, m.orbWobble, bassLevel(m.vizBands))
 		if m.st.Dur > 0 && m.st.Playing {
 			m.wv.record(float64(m.st.Pos)/float64(m.st.Dur), bandsLevel(m.vizBands))
 		}
@@ -631,6 +635,10 @@ func (m model) updateKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, doCmd(eng.ToggleShuffle)
 	case "r":
 		return m, doCmd(eng.CycleRepeat)
+	case "v":
+		m.vizMode = (m.vizMode + 1) % 2
+		saveVizMode(m.vizMode)
+		m.note, m.noteAt = "visualizer · "+vizModeName(m.vizMode), m.t
 	case "t":
 		next := nextTheme(m.themeName)
 		m.themeName = next.name
@@ -1011,6 +1019,9 @@ func simulatedBands(t float64, playing bool) [32]float64 {
 }
 
 func (m model) vizPanel(w, h int) string {
+	if m.vizMode == vizOrb {
+		return orbPanel(w, h-1, m.orbSpin, m.orbWobble, m.vizBands)
+	}
 	rows, bars := h-1, max(1, w/3)
 	heights := liveBarHeights(m.vizBands, bars, rows)
 	var peaks []float64
@@ -1189,7 +1200,7 @@ func (m model) transportPanel(w int) string {
 	case focusRecent:
 		hints = "←→ covers · ↑↓ rows · ↵ play · / search · tab → player · q quit "
 	case focusPlayer:
-		hints = "←→ seek · ↑↓ volume · n/p track · s/r modes · t theme · R reload · tab → queue · q quit "
+		hints = "←→ seek · ↑↓ volume · n/p track · s/r modes · v viz · t theme · R reload · tab → queue · q quit "
 	}
 	if m.focus == focusQueue && !m.recentVisible() {
 		hints = "↑↓ select · ↵ play · / search · space pause · tab → player · q quit "
@@ -1336,6 +1347,7 @@ func main() {
 	}
 	m := model{statusCh: make(chan string, 8), status: "starting…"}
 	m.cfg = loadConfig()
+	m.vizMode = loadVizMode()
 	m.artCache = newArtCache(8)
 	t := themeFromConfig(m.cfg, loadThemeName())
 	m.themeName = t.name
