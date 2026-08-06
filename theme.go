@@ -189,6 +189,10 @@ func configBool(cfg map[string]string, key string, def bool) bool {
 	return b
 }
 
+func configString(cfg map[string]string, key string) string {
+	return strings.TrimSpace(cfg[key])
+}
+
 func configInt(cfg map[string]string, key string, def int) int {
 	v, ok := cfg[key]
 	if !ok {

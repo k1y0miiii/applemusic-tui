@@ -15,6 +15,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/k1y0miiii/applemusic-tui/engine"
+	"github.com/k1y0miiii/applemusic-tui/lastfm"
 	"github.com/k1y0miiii/applemusic-tui/lyrics"
 	"github.com/k1y0miiii/applemusic-tui/visualizer"
 )
@@ -149,6 +150,13 @@ type model struct {
 	wv          wave        // recorded loudness across the current track
 
 	helpOpen bool // the ? overlay; any key dismisses it
+
+	// Last.fm, nil unless configured and authorized
+	scrobbler *lastfm.Client
+	scrKey    string        // artist+title of the play being timed
+	scrStart  time.Time     // wall clock when it started, for the timestamp
+	scrPlayed time.Duration // time actually listened, so a seek cannot fake it
+	scrDone   bool          // already scrobbled this play
 
 	// search overlay
 	searchOpen bool
@@ -419,10 +427,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.st.Dur > 0 && m.st.Playing {
 			m.wv.record(float64(m.st.Pos)/float64(m.st.Dur), bandsLevel(m.vizBands))
 		}
+		scrobble := m.advanceScrobble(time.Second / 30)
+		cmds := []tea.Cmd{tick()}
 		if visualizerClose != nil {
-			return m, tea.Batch(tick(), visualizerClose)
+			cmds = append(cmds, visualizerClose)
 		}
-		return m, tick()
+		if scrobble != nil {
+			cmds = append(cmds, scrobble)
+		}
+		return m, tea.Batch(cmds...)
 	case statusMsg:
 		m.status = string(msg)
 		return m, listenStatus(m.statusCh)
@@ -1350,11 +1363,14 @@ func main() {
 		case "--version", "-v", "version":
 			fmt.Printf("amtui %s %s/%s\n", version, runtime.GOOS, runtime.GOARCH)
 			return
+		case "lastfm-auth":
+			os.Exit(runLastfmAuth())
 		}
 	}
 	m := model{statusCh: make(chan string, 8), status: "starting…"}
 	m.cfg = loadConfig()
 	m.vizMode = loadVizMode()
+	m.scrobbler = newScrobbler(m.cfg)
 	m.artCache = newArtCache(8)
 	t := themeFromConfig(m.cfg, loadThemeName())
 	m.themeName = t.name

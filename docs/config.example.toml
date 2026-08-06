@@ -24,6 +24,14 @@ wave  = true   # progress bar drawn as the played waveform
 # the choice is remembered in ~/.config/amtui/vizmode, the same way the theme
 # is, so toggling it never rewrites this file and loses your comments.
 
+# Scrobbling is off until all three parts are in place. Create the key and
+# secret at https://www.last.fm/api/account/create, put them here, then run
+# `amtui lastfm-auth` once — it saves a session key to ~/.config/amtui/lastfm,
+# so this file never has to hold it.
+# [lastfm]
+# api_key    = ""
+# api_secret = ""
+
 [artwork]
 enabled = true
 # Hide the cover when fewer than this many columns would be left for lyrics.

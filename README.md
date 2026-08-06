@@ -47,6 +47,8 @@ which changes what is possible:
   that turns slowly and pumps with the bass.
 - **Synced lyrics** — timestamped lines from [LRCLIB](https://lrclib.net),
   no API keys, with the album cover rendered beside them in half-block color.
+- **Last.fm scrobbling** — optional, off until you set it up. Counts time
+  actually listened, so seeking to the end does not scrobble a track.
 - **Themes** — six built-in palettes cycled with `t`, overridable per color in
   a config file, plus an `auto` mode that pulls the accent from the artwork.
 - **Transport** — play/pause, next/prev, seek, volume, shuffle, repeat, and a
@@ -219,6 +221,25 @@ panel borders pulse with the bass — `visualizer.pulse` turns that off.
 
 Both 3D shapes are plain ASCII over the same 32 bands the bars use, so they cost
 no extra audio work and follow the active theme's accent colors.
+
+## Last.fm
+
+Scrobbling is opt-in. Create an API account at
+[last.fm/api/account/create](https://www.last.fm/api/account/create), put the
+key and secret under `[lastfm]` in `~/.config/amtui/config.toml`, then run:
+
+```sh
+amtui lastfm-auth
+```
+
+It prints a link to approve, and saves the session key to
+`~/.config/amtui/lastfm` (mode 600) — the key never has to go in the config
+file. Nothing is sent until all three parts are present.
+
+Tracks scrobble after half their length or four minutes, whichever comes first,
+and never below 30 seconds — Last.fm's own rules. The clock counts time actually
+listened rather than the playback position, so dragging the progress bar to the
+end does not count as a play.
 
 ## Themes
 
