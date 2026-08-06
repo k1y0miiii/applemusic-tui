@@ -178,11 +178,18 @@ func paintCells(cells []byte, shade []int, w, h int) string {
 // neighbouring cells, and the bright/dim speckle that produces reads as noise
 // at terminal resolution. Continuous lines keep each depth in one run of cells.
 const (
-	sphereLats     = 5   // latitude rings, poles excluded
-	sphereMeridian = 10  // meridians
-	sphereSamples  = 400 // points traced along every ring and meridian
-	sphereDepth    = 4.0 // viewer distance
-	sphereBulge    = 0.30
+	sphereLats     = 5    // latitude rings, poles excluded
+	sphereMeridian = 10   // meridians
+	sphereSamples  = 400  // points traced along every ring and meridian
+	sphereDepth    = 4.0  // viewer distance
+	sphereBulge    = 0.30 // per-band corrugation
+	sphereSwell    = 0.45 // how far the bass pumps the whole globe
+	sphereSpin     = 0.35 // the globe turns slower than the torus
+
+	// The projection is sized from the largest the globe can ever be, not from
+	// its size right now. Refitting it every frame divides the swell straight
+	// back out and the pump becomes invisible.
+	sphereMaxExtent = (1 + sphereSwell) * (1 + sphereBulge)
 )
 
 // sphereRadius deforms the cage by the spectrum. Latitude maps to frequency
@@ -209,18 +216,19 @@ func spherePanel(w, h int, spin, wobble float64, bands [32]float64) string {
 
 	tilt := 0.30 * math.Sin(wobble) // a lean, not a tumble: the poles stay poles
 	sinTilt, cosTilt := math.Sincos(tilt)
-	sinSpin, cosSpin := math.Sincos(spin)
+	sinSpin, cosSpin := math.Sincos(spin * sphereSpin)
 
-	breathe := 1 + 0.25*bandsLevel(bands)
-	// Measure the extent from the loudest band actually present, not from the
-	// theoretical maximum: otherwise quiet passages only ever use the bottom of
-	// the light ramp and the near face never lights up.
+	// The bass pumps the globe rather than turning it: this one is the pulse.
+	breathe := 1 + sphereSwell*bassLevel(bands)
+	// Shade against the loudest band actually present, not the theoretical
+	// maximum: otherwise quiet passages only ever use the bottom of the light
+	// ramp and the near face never lights up.
 	loudest := 0.0
 	for _, v := range bands {
 		loudest = math.Max(loudest, v)
 	}
 	extent := breathe * (1 + sphereBulge*loudest)
-	scale := math.Min(0.45*float64(h), 0.225*float64(w)) * sphereDepth / extent
+	scale := math.Min(0.45*float64(h), 0.225*float64(w)) * sphereDepth / sphereMaxExtent
 
 	cells := make([]byte, w*h)
 	shade := make([]int, w*h)

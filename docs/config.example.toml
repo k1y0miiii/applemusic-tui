@@ -20,6 +20,10 @@ peaks = true   # falling peak markers above the spectrum bars
 pulse = true   # accent brightness pulses with the bass
 wave  = true   # progress bar drawn as the played waveform
 
+# The shape — bars, torus or sphere — is not set here. Press "v" to cycle it;
+# the choice is remembered in ~/.config/amtui/vizmode, the same way the theme
+# is, so toggling it never rewrites this file and loses your comments.
+
 [artwork]
 enabled = true
 # Hide the cover when fewer than this many columns would be left for lyrics.

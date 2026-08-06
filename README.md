@@ -38,11 +38,13 @@ which changes what is possible:
 - **Queue** — jump to any track, append to queue, play next.
 - **Recently played** — a cover grid under the queue: your last ten albums,
   playlists and singles as half-block artwork, arrow keys to pick, `↵` to play.
-- **Live visualizer** — a Winamp-style spectrum of what is actually playing:
-  system-audio PCM through a 4096-sample Hann-window FFT into 32 bands
-  (denser at low frequencies), 30 fps. CoreAudio process tap on macOS,
-  PipeWire/PulseAudio monitor on Linux. Falls back to a clearly labeled
-  simulated animation when live capture is unavailable.
+- **Live visualizer** — what is actually playing: system-audio PCM through a
+  4096-sample Hann-window FFT into 32 bands (denser at low frequencies), 30 fps.
+  CoreAudio process tap on macOS, PipeWire/PulseAudio monitor on Linux. Falls
+  back to a clearly labeled simulated animation when live capture is
+  unavailable. Three looks, cycled with `v`: Winamp-style **bars**, a spinning
+  **torus** whose tube corrugates with the spectrum, and a wireframe **sphere**
+  that turns slowly and pumps with the bass.
 - **Synced lyrics** — timestamped lines from [LRCLIB](https://lrclib.net),
   no API keys, with the album cover rendered beside them in half-block color.
 - **Themes** — six built-in palettes cycled with `t`, overridable per color in
@@ -164,6 +166,7 @@ Run the test suite with `make test`, or `make verify` for the full check.
 | `←` / `→` | Recent: previous / next cover · Transport: seek −5 s / +5 s |
 | `s` | Toggle shuffle |
 | `r` | Cycle repeat mode |
+| `v` | Cycle visualizer: bars → torus → sphere |
 | `t` | Cycle color theme |
 | `R` | Reload the web player if it wedges |
 | `/` | Open search |
@@ -182,6 +185,28 @@ Run the test suite with `make test`, or `make verify` for the full check.
 
 <p align="center"><img src="docs/media/search.png" alt="Search overlay" width="800"></p>
 <p align="center"><img src="docs/media/lyrics.png" alt="Queue, live visualizer and synced lyrics" width="800"></p>
+
+## Visualizer
+
+Press `v` to cycle three shapes; the choice is remembered in
+`~/.config/amtui/vizmode`.
+
+| Mode | What it draws |
+| --- | --- |
+| `bars` | 32-band spectrum with peak-hold markers. The default. |
+| `torus` | A spinning donut. Its tube thickness at each angle comes from the band that owns that slice of the ring, so the shape corrugates with the spectrum. |
+| `sphere` | A wireframe globe of latitude rings and meridians, shaded by depth. Frequency maps to latitude symmetrically, so the bass swells its waist. |
+
+The two 3D shapes answer the beat differently. The torus answers with motion: a
+bass kick speeds its spin up. The sphere answers with size — it turns at about a
+third of that pace and instead swells and contracts on the bass, so the pump is
+what you watch rather than the rotation.
+
+The bars do neither; they are the spectrum itself. Independent of the mode, the
+panel borders pulse with the bass — `visualizer.pulse` turns that off.
+
+Both 3D shapes are plain ASCII over the same 32 bands the bars use, so they cost
+no extra audio work and follow the active theme's accent colors.
 
 ## Themes
 

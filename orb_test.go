@@ -224,3 +224,41 @@ func TestVizModeUpgradesTheOldOrbName(t *testing.T) {
 		t.Fatalf("old \"orb\" file loaded as mode %d, want torus", got)
 	}
 }
+
+func TestSpherePumpsVisiblyOnBass(t *testing.T) {
+	// Sizing the projection from the globe's current radius refits it every
+	// frame and divides the swell straight back out: the math pumps, the screen
+	// does not move.
+	//
+	// Only the four lowest bands move between the two frames, and every other
+	// band is pinned at full. That holds the loudest band and the radius at the
+	// poles fixed, so the height the globe reaches can only change through the
+	// bass swell — under a refit the two frames come out the same height.
+	defer lipgloss.SetColorProfile(lipgloss.ColorProfile())
+	lipgloss.SetColorProfile(termenv.Ascii)
+
+	height := func(bass float64) int {
+		bands := fullBands(1)
+		for i := 0; i < 4; i++ { // bassLevel reads the four lowest bands
+			bands[i] = bass
+		}
+		rows := 0
+		// Tall enough that a full kick still has headroom; clipping at the panel
+		// edge would cap both frames at the same height and hide the difference.
+		for _, row := range strings.Split(spherePanel(60, 24, 0.8, 0.6, bands), "\n") {
+			if strings.TrimSpace(row) != "" {
+				rows++
+			}
+		}
+		return rows
+	}
+
+	// A refit does not cancel the swell exactly — the corrugation still shifts a
+	// row or so — so this asks for a swell worth looking at, not merely one with
+	// the right sign.
+	quiet, loud := height(0), height(1)
+	if loud-quiet < quiet/4 {
+		t.Fatalf("globe is %d rows tall silent and %d on a full kick, a %d-row swell — the pump is scaled away",
+			quiet, loud, loud-quiet)
+	}
+}
