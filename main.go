@@ -148,6 +148,8 @@ type model struct {
 	orbKickBase float64     // running average the kick is measured against
 	wv          wave        // recorded loudness across the current track
 
+	helpOpen bool // the ? overlay; any key dismisses it
+
 	// search overlay
 	searchOpen bool
 	sInput     bool
@@ -560,6 +562,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.tileArt[msg.id] = msg.img // nil is a valid "tried and failed" marker
 	case tea.KeyMsg:
+		// Any key dismisses help, and that key does nothing else — reading the
+		// list should never fire the command you were looking up.
+		if m.helpOpen {
+			m.helpOpen = false
+			return m, nil
+		}
 		if m.searchOpen {
 			return m.updateSearch(msg)
 		}
@@ -638,6 +646,8 @@ func (m model) updateKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, doCmd(eng.ToggleShuffle)
 	case "r":
 		return m, doCmd(eng.CycleRepeat)
+	case "?":
+		m.helpOpen = true
 	case "v":
 		m.vizMode = (m.vizMode + 1) % vizModes
 		saveVizMode(m.vizMode)
@@ -1201,16 +1211,7 @@ func (m model) transportPanel(w int) string {
 	if title == "" {
 		title, artist = "nothing playing", "press / to find music"
 	}
-	hints := "↑↓ select · ↵ play · / search · space pause · tab → recent · q quit "
-	switch m.focus {
-	case focusRecent:
-		hints = "←→ covers · ↑↓ rows · ↵ play · / search · tab → player · q quit "
-	case focusPlayer:
-		hints = "←→ seek · ↑↓ volume · n/p track · s/r modes · v viz · t theme · R reload · tab → queue · q quit "
-	}
-	if m.focus == focusQueue && !m.recentVisible() {
-		hints = "↑↓ select · ↵ play · / search · space pause · tab → player · q quit "
-	}
+	hints := transportHints(m.focus)
 	if m.note != "" {
 		hints = m.note + " "
 	}
@@ -1229,6 +1230,11 @@ func (m model) transportPanel(w int) string {
 			lipgloss.NewStyle().Foreground(fgBright).Bold(true).Render(m.loading) +
 			dim.Render("…")
 	}
+	// The hints share this row with the track title, so on a narrow terminal
+	// there may be no room for them. pad() truncates silently, which is how the
+	// old line lost its tail without anyone noticing; drop to the short form
+	// instead, and then to nothing, so whatever is shown is shown whole.
+	hints = fitHints(hints, w-lipgloss.Width(l1)-1)
 	r1 := faint.Render(hints)
 	line1 := l1 + strings.Repeat(" ", max(1, w-lipgloss.Width(l1)-lipgloss.Width(r1))) + r1
 
@@ -1301,6 +1307,9 @@ func (m model) View() string {
 	}
 	if m.phase != phaseReady {
 		return m.bootView()
+	}
+	if m.helpOpen {
+		return m.helpView()
 	}
 	if m.searchOpen {
 		return m.searchView()
