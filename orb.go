@@ -28,7 +28,9 @@ const (
 
 const (
 	vizBars = iota
-	vizOrb
+	vizTorus
+	vizSphere
+	vizModes
 )
 
 // orbAdvance moves the two angles on one 1/30s tick. The spin has a steady base
@@ -116,7 +118,14 @@ func orbPanel(w, h int, spin, wobble float64, bands [32]float64) string {
 		}
 	}
 
-	// Same three-step accent ramp the bars use, so both modes read as one family.
+	return paintCells(cells, shade, w, h)
+}
+
+// paintCells colors a rendered grid and joins it into panel rows. Shade is an
+// index into orbRamp; it picks the accent step, so brighter parts of the shape
+// come forward. Same three-step ramp the bars use, so every mode reads as one
+// family and the theme key keeps working untouched.
+func paintCells(cells []byte, shade []int, w, h int) string {
 	styles := [3]lipgloss.Style{
 		lipgloss.NewStyle().Foreground(accentLo),
 		lipgloss.NewStyle().Foreground(accent),
@@ -159,6 +168,112 @@ func orbPanel(w, h int, spin, wobble float64, bands [32]float64) string {
 	return out.String()
 }
 
+// The sphere is the HUD-globe look: a wireframe cage of latitude rings and
+// meridians, drawn as continuous lines and shaded by depth so the near side
+// glows and the far side hangs behind it as a ghost. Nothing is culled — seeing
+// the back of the cage through the front is what makes it read as a shell
+// rather than a disc.
+//
+// Lines rather than a cloud of points: a cloud puts near and far samples in
+// neighbouring cells, and the bright/dim speckle that produces reads as noise
+// at terminal resolution. Continuous lines keep each depth in one run of cells.
+const (
+	sphereLats     = 5   // latitude rings, poles excluded
+	sphereMeridian = 10  // meridians
+	sphereSamples  = 400 // points traced along every ring and meridian
+	sphereDepth    = 4.0 // viewer distance
+	sphereBulge    = 0.30
+)
+
+// sphereRadius deforms the cage by the spectrum. Latitude maps to frequency
+// symmetrically — bass at the equator, treble at the poles — so a kick swells
+// the waist instead of tipping the shape to one side.
+func sphereRadius(sinLat float64, bands [32]float64) float64 {
+	band := min(len(bands)-1, int(math.Abs(sinLat)*float64(len(bands))))
+	return 1 + sphereBulge*bands[band]
+}
+
+// sphereShade maps a point's depth to a light level, nearest brightest. Squared
+// so the far half collapses into the bottom of the ramp: under a linear falloff
+// the back of the cage stays nearly as bright as the front and the two read as
+// one solid crust instead of a shell you can see into.
+func sphereShade(z, extent float64) int {
+	near := (extent - z) / (2 * extent)
+	return max(0, min(len(orbRamp)-1, int(near*near*float64(len(orbRamp)))))
+}
+
+func spherePanel(w, h int, spin, wobble float64, bands [32]float64) string {
+	if w < 4 || h < 2 {
+		return strings.Repeat(" ", max(0, w))
+	}
+
+	tilt := 0.30 * math.Sin(wobble) // a lean, not a tumble: the poles stay poles
+	sinTilt, cosTilt := math.Sincos(tilt)
+	sinSpin, cosSpin := math.Sincos(spin)
+
+	breathe := 1 + 0.25*bandsLevel(bands)
+	// Measure the extent from the loudest band actually present, not from the
+	// theoretical maximum: otherwise quiet passages only ever use the bottom of
+	// the light ramp and the near face never lights up.
+	loudest := 0.0
+	for _, v := range bands {
+		loudest = math.Max(loudest, v)
+	}
+	extent := breathe * (1 + sphereBulge*loudest)
+	scale := math.Min(0.45*float64(h), 0.225*float64(w)) * sphereDepth / extent
+
+	cells := make([]byte, w*h)
+	shade := make([]int, w*h)
+	invZ := make([]float64, w*h)
+	for i := range cells {
+		cells[i] = ' '
+	}
+
+	plot := func(lat, lon float64) {
+		sinLat, cosLat := math.Sincos(lat)
+		sinLon, cosLon := math.Sincos(lon)
+		r := breathe * sphereRadius(sinLat, bands)
+
+		x, y, z := r*cosLat*cosLon, r*sinLat, r*cosLat*sinLon
+		// Spin about the polar axis, then lean the axis toward the viewer.
+		x, z = x*cosSpin+z*sinSpin, z*cosSpin-x*sinSpin
+		y, z = y*cosTilt-z*sinTilt, y*sinTilt+z*cosTilt
+
+		depth := sphereDepth + z
+		if depth <= 0 {
+			return
+		}
+		ooz := 1 / depth
+		col := w/2 + int(2*scale*ooz*x)
+		row := h/2 - int(scale*ooz*y)
+		if col < 0 || col >= w || row < 0 || row >= h {
+			return
+		}
+		idx := row*w + col
+		if ooz <= invZ[idx] {
+			return // something nearer already owns this cell
+		}
+		invZ[idx] = ooz
+		shade[idx] = sphereShade(z, extent)
+		cells[idx] = orbRamp[shade[idx]]
+	}
+
+	for ring := 1; ring <= sphereLats; ring++ {
+		lat := -math.Pi/2 + math.Pi*float64(ring)/(sphereLats+1)
+		for i := 0; i < sphereSamples; i++ {
+			plot(lat, 2*math.Pi*float64(i)/sphereSamples)
+		}
+	}
+	for meridian := 0; meridian < sphereMeridian; meridian++ {
+		lon := 2 * math.Pi * float64(meridian) / sphereMeridian
+		for i := 0; i < sphereSamples; i++ {
+			plot(-math.Pi/2+math.Pi*float64(i)/(sphereSamples-1), lon)
+		}
+	}
+
+	return paintCells(cells, shade, w, h)
+}
+
 // The visualizer mode lives in its own one-line file, next to the theme, so
 // writing it back never clobbers the comments in config.toml.
 func vizModeFile() string {
@@ -169,16 +284,27 @@ func vizModeFile() string {
 	return filepath.Join(d, "vizmode")
 }
 
+var vizModeNames = [vizModes]string{"bars", "torus", "sphere"}
+
 func loadVizMode() int {
 	p := vizModeFile()
 	if p == "" {
 		return vizBars
 	}
 	b, err := os.ReadFile(p)
-	if err != nil || strings.TrimSpace(string(b)) != "orb" {
+	if err != nil {
 		return vizBars
 	}
-	return vizOrb
+	name := strings.TrimSpace(string(b))
+	if name == "orb" {
+		name = "torus" // the torus shipped alone, under the generic name
+	}
+	for mode, known := range vizModeNames {
+		if known == name {
+			return mode
+		}
+	}
+	return vizBars
 }
 
 // saveVizMode is best-effort: a read-only config dir must not break the UI.
@@ -194,8 +320,8 @@ func saveVizMode(mode int) {
 }
 
 func vizModeName(mode int) string {
-	if mode == vizOrb {
-		return "orb"
+	if mode < 0 || mode >= vizModes {
+		return vizModeNames[vizBars]
 	}
-	return "bars"
+	return vizModeNames[mode]
 }

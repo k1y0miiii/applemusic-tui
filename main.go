@@ -636,7 +636,7 @@ func (m model) updateKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "r":
 		return m, doCmd(eng.CycleRepeat)
 	case "v":
-		m.vizMode = (m.vizMode + 1) % 2
+		m.vizMode = (m.vizMode + 1) % vizModes
 		saveVizMode(m.vizMode)
 		m.note, m.noteAt = "visualizer · "+vizModeName(m.vizMode), m.t
 	case "t":
@@ -1019,8 +1019,11 @@ func simulatedBands(t float64, playing bool) [32]float64 {
 }
 
 func (m model) vizPanel(w, h int) string {
-	if m.vizMode == vizOrb {
+	switch m.vizMode {
+	case vizTorus:
 		return orbPanel(w, h-1, m.orbSpin, m.orbWobble, m.vizBands)
+	case vizSphere:
+		return spherePanel(w, h-1, m.orbSpin, m.orbWobble, m.vizBands)
 	}
 	rows, bars := h-1, max(1, w/3)
 	heights := liveBarHeights(m.vizBands, bars, rows)
