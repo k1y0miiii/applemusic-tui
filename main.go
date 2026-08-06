@@ -17,6 +17,7 @@ import (
 	"github.com/k1y0miiii/applemusic-tui/engine"
 	"github.com/k1y0miiii/applemusic-tui/lastfm"
 	"github.com/k1y0miiii/applemusic-tui/lyrics"
+	"github.com/k1y0miiii/applemusic-tui/mpris"
 	"github.com/k1y0miiii/applemusic-tui/visualizer"
 )
 
@@ -78,6 +79,7 @@ type (
 		id  string // recently-played entry the cover belongs to
 		img image.Image
 	}
+	mprisQuitMsg        struct{}
 	visualizerOpenedMsg struct {
 		service *visualizer.Service
 		err     error
@@ -150,6 +152,10 @@ type model struct {
 	wv          wave        // recorded loudness across the current track
 
 	helpOpen bool // the ? overlay; any key dismisses it
+
+	// desktop integration; nil off Linux or without a session bus
+	mpris     *mpris.Server
+	mprisQuit chan struct{}
 
 	// Last.fm, nil unless configured and authorized
 	scrobbler *lastfm.Client
@@ -442,11 +448,25 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case readyMsg:
 		m.phase, m.eng = phaseReady, msg.eng
 		m.vizOpening = true
-		return m, tea.Batch(
+		cmds := []tea.Cmd{
 			m.fetchState(),
 			m.libraryCmd(), // fills the recently-played grid
 			openVisualizerCmd(visualizer.OpenSystemSource),
-		)
+		}
+		// A machine with no session bus — a TTY, a container, macOS — simply
+		// has no MPRIS, which is not an error worth showing.
+		if srv, err := mpris.Publish(mprisControls{eng: m.eng, quit: m.mprisQuit}); err == nil {
+			m.mpris = srv
+			cmds = append(cmds, listenMPRISQuit(m.mprisQuit))
+		}
+		return m, tea.Batch(cmds...)
+	case mprisQuitMsg:
+		m.closeVisualizerAsync()
+		m.mpris.Close()
+		if m.eng != nil {
+			m.eng.Close()
+		}
+		return m, tea.Quit
 	case visualizerOpenedMsg:
 		if m.phase != phaseReady || !m.vizOpening {
 			if msg.service != nil {
@@ -479,6 +499,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 			m.st = newSt
+			m.mpris.Update(mprisState(m.st))
 			nowInitializing := m.st.Initializing
 			if m.initPending && nowInitializing {
 				m.initSeen = true
@@ -641,6 +662,7 @@ func (m model) updateKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "q", "ctrl+c":
 		m.closeVisualizerAsync()
+		m.mpris.Close()
 		if eng != nil {
 			eng.Close()
 		}
@@ -1367,7 +1389,11 @@ func main() {
 			os.Exit(runLastfmAuth())
 		}
 	}
-	m := model{statusCh: make(chan string, 8), status: "starting…"}
+	m := model{
+		statusCh:  make(chan string, 8),
+		status:    "starting…",
+		mprisQuit: make(chan struct{}, 1),
+	}
 	m.cfg = loadConfig()
 	m.vizMode = loadVizMode()
 	m.scrobbler = newScrobbler(m.cfg)

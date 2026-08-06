@@ -49,6 +49,9 @@ which changes what is possible:
   no API keys, with the album cover rendered beside them in half-block color.
 - **Last.fm scrobbling** — optional, off until you set it up. Counts time
   actually listened, so seeking to the end does not scrobble a track.
+- **MPRIS on Linux** — media keys, panel widgets, lock screens and `playerctl`
+  drive it like any desktop player. Appears automatically when there is a
+  session bus.
 - **Themes** — six built-in palettes cycled with `t`, overridable per color in
   a config file, plus an `auto` mode that pulls the accent from the artwork.
 - **Transport** — play/pause, next/prev, seek, volume, shuffle, repeat, and a
@@ -221,6 +224,22 @@ panel borders pulse with the bass — `visualizer.pulse` turns that off.
 
 Both 3D shapes are plain ASCII over the same 32 bands the bars use, so they cost
 no extra audio work and follow the active theme's accent colors.
+
+## MPRIS (Linux)
+
+amtui publishes itself on D-Bus as `org.mpris.MediaPlayer2.amtui`, so the
+desktop can drive it without the terminal being focused:
+
+```sh
+playerctl -p amtui play-pause
+playerctl -p amtui metadata
+```
+
+Media keys, panel applets and lock screens pick it up on their own. Play,
+pause, next, previous, seek and volume are wired; there is no track list and
+nothing to raise, and both are declared as such. It appears whenever a session
+bus is present and is silently skipped when there is not — a TTY, a container,
+or macOS.
 
 ## Last.fm
 
