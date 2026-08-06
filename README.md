@@ -166,11 +166,17 @@ Run the test suite with `make test`, or `make verify` for the full check.
 | `←` / `→` | Recent: previous / next cover · Transport: seek −5 s / +5 s |
 | `s` | Toggle shuffle |
 | `r` | Cycle repeat mode |
+| `?` | Show every key |
 | `v` | Cycle visualizer: bars → torus → sphere |
 | `t` | Cycle color theme |
 | `R` | Reload the web player if it wedges |
 | `/` | Open search |
 | `q` / `Ctrl+C` | Quit |
+
+### Mouse
+
+Click a queue row or a cover to play it, click the progress bar to seek, and
+scroll the wheel over the queue or the cover grid to move the selection.
 
 ### Search
 

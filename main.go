@@ -561,6 +561,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.tileArt = map[string]image.Image{}
 		}
 		m.tileArt[msg.id] = msg.img // nil is a valid "tried and failed" marker
+	case tea.MouseMsg:
+		return m.updateMouse(msg)
 	case tea.KeyMsg:
 		// Any key dismisses help, and that key does nothing else — reading the
 		// list should never fire the command you were looking up.
@@ -1252,7 +1254,7 @@ func (m model) transportPanel(w int) string {
 		dim.Render(fmt.Sprintf(" %d%% ", m.st.Volume))
 	times := fmtTime(m.st.Pos) + " "
 	timee := " " + fmtTime(m.st.Dur)
-	barW := max(10, w-lipgloss.Width(times)-lipgloss.Width(timee)-lipgloss.Width(r2)-8)
+	_, barW := m.progressGeometry(w)
 	frac := 0.0
 	if m.st.Dur > 0 {
 		frac = min(float64(m.st.Pos)/float64(m.st.Dur), 1)
@@ -1314,28 +1316,18 @@ func (m model) View() string {
 	if m.searchOpen {
 		return m.searchView()
 	}
-	topH := m.h - 4
-	leftW := m.w * 42 / 100
-	rightW := m.w - leftW
+	lay := m.layout()
 
-	qw := leftW - 2
-	recH := 0
-	if len(m.recent) > 0 {
-		recH = recentPanelHeight(topH)
-	}
-	qh := topH - 2 - recH
-	vh := topH * 62 / 100
-	vw := rightW - 2
-	lh := topH - vh - 2
-
-	left := panel(m.queueTitle(), m.queuePanel(qw, qh), qw, qh, m.focus == focusQueue, m.pulsedAccent())
-	if recH > 0 {
+	left := panel(m.queueTitle(), m.queuePanel(lay.qw, lay.qh), lay.qw, lay.qh,
+		m.focus == focusQueue, m.pulsedAccent())
+	if lay.recH > 0 {
 		left = lipgloss.JoinVertical(lipgloss.Left, left,
-			panel(m.recentTitle(), m.recentPanel(qw, recH-2), qw, recH-2,
+			panel(m.recentTitle(), m.recentPanel(lay.qw, lay.recH-2), lay.qw, lay.recH-2,
 				m.focus == focusRecent, m.pulsedAccent()))
 	}
-	viz := panel(m.visualizerTitle(), m.vizPanel(vw, vh-2), vw, vh-2, false, m.pulsedAccent())
-	lyr := panel("LYRICS", m.lyricsPanel(vw, lh), vw, lh, false, m.pulsedAccent())
+	viz := panel(m.visualizerTitle(), m.vizPanel(lay.vw, lay.vh-2), lay.vw, lay.vh-2,
+		false, m.pulsedAccent())
+	lyr := panel("LYRICS", m.lyricsPanel(lay.vw, lay.lh), lay.vw, lay.lh, false, m.pulsedAccent())
 	right := lipgloss.JoinVertical(lipgloss.Left, viz, lyr)
 	top := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 
@@ -1367,7 +1359,9 @@ func main() {
 	t := themeFromConfig(m.cfg, loadThemeName())
 	m.themeName = t.name
 	applyTheme(t)
-	p := tea.NewProgram(m, tea.WithAltScreen())
+	// Cell motion rather than all motion: the app only reacts to clicks and the
+	// wheel, and all-motion floods the loop with a message per pointer move.
+	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	if _, err := p.Run(); err != nil {
 		log.Fatal(err)
 	}
