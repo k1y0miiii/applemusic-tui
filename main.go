@@ -113,6 +113,9 @@ type model struct {
 
 	statusCh chan string
 
+	badPolls       int  // consecutive failed or signed-out state polls
+	mprisListening bool // the quit listener is running; a reconnect must not add a second
+
 	// queue-replacement in flight (slow setQueue on playlists/albums)
 	loading         string  // title being loaded, "" = none
 	loadSnap        string  // state snapshot at fire time; change = done
@@ -247,6 +250,33 @@ func (m model) audioInitializingLine() string {
 	sp := []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
 	return lipgloss.NewStyle().Foreground(accentHi).Render(" "+string(sp[int(m.t*12)%len(sp)])+" ") +
 		lipgloss.NewStyle().Foreground(fgDim).Render(audioInitializingText)
+}
+
+// badPollsToReconnect is 5 polls ≈ 2.5s — long enough that a busy browser or a
+// single 10s eval timeout never costs the user a browser restart.
+const badPollsToReconnect = 5
+
+// reconnect drops the dead browser and re-runs startup's Connect, which opens a
+// visible login window on its own when the session is really gone.
+func (m model) reconnect(status string) (tea.Model, tea.Cmd) {
+	eng := m.eng
+	m.mpris.Close()
+	m.mpris, m.eng = nil, nil
+	m.badPolls = 0
+	m.st = engine.State{}
+	m.phase, m.status = phaseBoot, status
+	return m, reconnectCmd(eng, m.statusCh)
+}
+
+// The old browser must be gone before the new one starts: both use the same
+// profile directory, and Chrome holds a lock on it.
+func reconnectCmd(eng *engine.Engine, ch chan string) tea.Cmd {
+	return func() tea.Msg {
+		if eng != nil {
+			eng.Close()
+		}
+		return connectCmd(ch)()
+	}
 }
 
 func connectCmd(ch chan string) tea.Cmd {
@@ -447,17 +477,25 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, listenStatus(m.statusCh)
 	case readyMsg:
 		m.phase, m.eng = phaseReady, msg.eng
-		m.vizOpening = true
 		cmds := []tea.Cmd{
 			m.fetchState(),
 			m.libraryCmd(), // fills the recently-played grid
-			openVisualizerCmd(visualizer.OpenSystemSource),
+		}
+		// System audio capture outlives the browser, so a reconnect keeps the
+		// visualizer it already has instead of opening a second source.
+		if m.vizService == nil {
+			m.vizOpening = true
+			cmds = append(cmds, openVisualizerCmd(visualizer.OpenSystemSource))
 		}
 		// A machine with no session bus — a TTY, a container, macOS — simply
-		// has no MPRIS, which is not an error worth showing.
+		// has no MPRIS, which is not an error worth showing. MPRIS is re-published
+		// after a reconnect because its controls hold the old engine.
 		if srv, err := mpris.Publish(mprisControls{eng: m.eng, quit: m.mprisQuit}); err == nil {
 			m.mpris = srv
-			cmds = append(cmds, listenMPRISQuit(m.mprisQuit))
+			if !m.mprisListening {
+				m.mprisListening = true
+				cmds = append(cmds, listenMPRISQuit(m.mprisQuit))
+			}
 		}
 		return m, tea.Batch(cmds...)
 	case mprisQuitMsg:
@@ -485,8 +523,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case failMsg:
 		m.phase, m.status = phaseFail, msg.err.Error()
 	case pollMsg:
+		if m.eng == nil {
+			return m, nil // a reconnect is in flight; readyMsg restarts the loop
+		}
 		return m, m.fetchState()
 	case stateMsg:
+		// A dead session shows up two ways: isAuthorized flips false, or — once
+		// the page has navigated away from MusicKit — the poll fails outright.
+		// Either way it must persist, so a single hiccup cannot restart us.
+		if msg.err != nil || !msg.st.Authed {
+			m.badPolls++
+			if m.badPolls >= badPollsToReconnect {
+				return m.reconnect("session lost — signing in to Apple Music again…")
+			}
+		} else {
+			m.badPolls = 0
+		}
 		var cmd tea.Cmd
 		if msg.err == nil {
 			wasInitializing := m.st.Initializing

@@ -64,6 +64,8 @@ const stateJS = `(async () => {
   );
   return JSON.stringify({
     err,
+    // A session can die mid-run; the UI watches this to re-run the login flow.
+    authed: mk.isAuthorized === true,
     playing: mk.playbackState === 2,
     initializing,
     engineReady,

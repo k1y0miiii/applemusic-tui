@@ -25,6 +25,7 @@ type Track struct {
 }
 
 type State struct {
+	Authed       bool // false once the Apple Music session is gone
 	Playing      bool
 	Initializing bool
 	Pos, Dur     time.Duration
@@ -405,6 +406,7 @@ func (e *Engine) State() (State, error) {
 	defer e.mu.Unlock()
 	var raw struct {
 		Err          string    `json:"err"`
+		Authed       bool      `json:"authed"`
 		Playing      bool      `json:"playing"`
 		Initializing bool      `json:"initializing"`
 		EngineReady  bool      `json:"engineReady"`
@@ -423,6 +425,7 @@ func (e *Engine) State() (State, error) {
 	}
 	e.updateWindowLifecycleLocked(raw.EngineReady, raw.HiddenStall)
 	st := State{
+		Authed:       raw.Authed,
 		Playing:      raw.Playing,
 		Initializing: raw.Initializing,
 		Pos:          time.Duration(raw.Pos * float64(time.Second)),
