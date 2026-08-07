@@ -6,6 +6,7 @@ package engine
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,8 +14,8 @@ import (
 	"time"
 
 	cdpbrowser "github.com/chromedp/cdproto/browser"
+	cdpnetwork "github.com/chromedp/cdproto/network"
 	cdpruntime "github.com/chromedp/cdproto/runtime"
-	cdpstorage "github.com/chromedp/cdproto/storage"
 	"github.com/chromedp/chromedp"
 )
 
@@ -485,14 +486,20 @@ func (e *Engine) results(js string) (SearchResults, error) {
 		Albums    []jsTrack `json:"albums"`
 		Playlists []jsTrack `json:"playlists"`
 		Recent    []jsTrack `json:"recent"`
+		Err       string    `json:"err"` // Apple refused the query and said why
 	}
 	if err := e.evalJSON(js, &raw); err != nil {
 		return SearchResults{}, err
 	}
-	return SearchResults{
+	res := SearchResults{
 		Songs: tracks(raw.Songs), Albums: tracks(raw.Albums),
 		Playlists: tracks(raw.Playlists), Recent: tracks(raw.Recent),
-	}, nil
+	}
+	if raw.Err != "" {
+		// Whatever did come back is still worth showing alongside the reason.
+		return res, errors.New(raw.Err)
+	}
+	return res, nil
 }
 
 // Search queries the full Apple Music catalog.
@@ -523,21 +530,28 @@ func (e *Engine) Account() (Account, error) {
 // SignOut drops the MusicKit user token, leaving the Apple ID cookies in the
 // profile — signing back in does not ask for a password.
 func (e *Engine) SignOut() error {
-	if err := e.do(signOutJS); err != nil {
-		return err
-	}
+	// unauthorize() only clears MusicKit's own copy of the token. Best effort:
+	// the cookies below are what actually carry the session across a restart.
+	_ = e.do(signOutJS)
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if err := poll(e.ctx, mkSignedOut, 10*time.Second, "sign-out"); err != nil {
+	tctx, cancel := context.WithTimeout(e.ctx, 15*time.Second)
+	defer cancel()
+	// media-user-token is the session; mut-refresh mints a new one, so leaving
+	// either behind means the next launch signs itself straight back in. Only
+	// music.apple.com is touched — the Apple ID cookies on apple.com stay, so
+	// signing back in does not ask for a password.
+	if err := chromedp.Run(tctx, chromedp.ActionFunc(func(c context.Context) error {
+		for _, name := range []string{"media-user-token", "mut-refresh"} {
+			if err := cdpnetwork.DeleteCookies(name).WithDomain(".music.apple.com").Do(c); err != nil {
+				return err
+			}
+		}
+		return nil
+	})); err != nil {
 		return err
 	}
-	// The token lives in localStorage and the browser is closed with SIGKILL,
-	// which can lose a write that just happened; clearing over CDP goes to the
-	// store directly, so the next launch cannot come back still signed in.
-	tctx, cancel := context.WithTimeout(e.ctx, 10*time.Second)
-	defer cancel()
-	return chromedp.Run(tctx,
-		cdpstorage.ClearDataForOrigin("https://music.apple.com", "local_storage"))
+	return poll(e.ctx, mkSignedOut, 10*time.Second, "sign-out")
 }
 
 // Reload reloads music.apple.com in place — the un-wedge lever when the web

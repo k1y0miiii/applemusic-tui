@@ -89,3 +89,22 @@ func TestAccountLinesFallBackWithoutAProfile(t *testing.T) {
 		t.Fatalf("who = %q, want the name and handle", lines[0])
 	}
 }
+
+func TestLibraryErrorKeepsWhateverArrived(t *testing.T) {
+	// Apple grants CloudLibrary and ListeningHistory separately, so a refusal
+	// can come back next to real results; dropping them with the note would
+	// blank a grid the account is still allowed to see.
+	m := model{phase: phaseReady, w: 100, h: 40}
+	next, _ := m.Update(searchMsg{
+		res:       engine.SearchResults{Recent: []engine.Track{{ID: "1", Title: "Track"}}},
+		err:       errors.New("does not have access to privilege: ListeningHistory"),
+		keepInput: true,
+	})
+	got := next.(model)
+	if len(got.recent) != 1 {
+		t.Fatalf("recent = %d entries, want 1 — results were dropped with the error", len(got.recent))
+	}
+	if !strings.Contains(got.note, "ListeningHistory") {
+		t.Fatalf("note = %q, want Apple's reason", got.note)
+	}
+}

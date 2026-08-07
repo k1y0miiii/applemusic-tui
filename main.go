@@ -640,18 +640,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.sBusy = false
 		if msg.err != nil {
 			m.note, m.noteAt = msg.err.Error(), m.t
-		} else {
-			m.sRes, m.sSel, m.sInput = msg.res, 0, msg.keepInput
-			if !msg.keepInput && m.sTab == 0 {
-				m.sTab = 1 // catalog search has no RECENT — land on SONGS
-			}
-			// Only a library load carries recently played; a catalog search must
-			// not wipe the grid.
-			if len(msg.res.Recent) > 0 {
-				m.recent = msg.res.Recent
-				m.recentSel = min(m.recentSel, len(m.recent)-1)
-				return m, tea.Batch(m.fetchTileArtCmds()...)
-			}
+		}
+		// Apple grants the library and the listening history as separate
+		// privileges, so one can be refused while the other answers — whatever
+		// did arrive is shown alongside the reason rather than dropped with it.
+		m.sRes, m.sSel, m.sInput = msg.res, 0, msg.keepInput
+		if !msg.keepInput && m.sTab == 0 {
+			m.sTab = 1 // catalog search has no RECENT — land on SONGS
+		}
+		// Only a library load carries recently played; a catalog search must
+		// not wipe the grid.
+		if len(msg.res.Recent) > 0 {
+			m.recent = msg.res.Recent
+			m.recentSel = min(m.recentSel, len(m.recent)-1)
+			return m, tea.Batch(m.fetchTileArtCmds()...)
 		}
 	case tileArtMsg:
 		if m.tileArt == nil {

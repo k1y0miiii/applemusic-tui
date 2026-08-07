@@ -390,11 +390,27 @@ const queueLaterJS = `(() => {
 
 const libraryJS = `(async () => {
   const mk = MusicKit.getInstance();
+  // An account without an active subscription is answered with a 400 that
+  // MusicKit resolves rather than throws — the body carries errors instead of
+  // data. Swallowing that into an empty list is how "no subscription" used to
+  // reach the user as a blank library with nothing to explain it.
+  const problems = [];
   const get = async (path, params) => {
     try {
       const r = await mk.api.music(path, params);
-      return (r.data && r.data.data) || [];
-    } catch (e) { return []; }
+      const body = (r && r.data) || {};
+      const bad = (body.errors || (r && r.errors) || [])[0];
+      if (bad) {
+        // detail names the missing privilege; messageForDisplay is just
+        // "insufficient privileges", which tells the user nothing.
+        problems.push(bad.detail || bad.messageForDisplay || bad.title || 'request failed');
+        return [];
+      }
+      return body.data || [];
+    } catch (e) {
+      problems.push((e && e.message) || String(e));
+      return [];
+    }
   };
   const [albums, playlists, recent] = await Promise.all([
     get('/v1/me/library/albums', { limit: 100 }),
@@ -420,6 +436,7 @@ const libraryJS = `(async () => {
     songs: [], recent: rec,
     albums: albums.map(item('album')),
     playlists: playlists.map(item('playlist')),
+    err: problems[0] || '',
   });
 })()`
 
