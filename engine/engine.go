@@ -14,6 +14,7 @@ import (
 
 	cdpbrowser "github.com/chromedp/cdproto/browser"
 	cdpruntime "github.com/chromedp/cdproto/runtime"
+	cdpstorage "github.com/chromedp/cdproto/storage"
 	"github.com/chromedp/chromedp"
 )
 
@@ -272,6 +273,7 @@ func poll(ctx context.Context, expr string, timeout time.Duration, what string) 
 
 const mkReady = `typeof MusicKit !== 'undefined' && !!MusicKit.getInstance()`
 const mkAuthorized = mkReady + ` && MusicKit.getInstance().isAuthorized === true`
+const mkSignedOut = mkReady + ` && MusicKit.getInstance().isAuthorized !== true`
 
 // Connect launches the mostly-offscreen browser and, if the session is
 // missing, walks the user through a visible login window. status receives
@@ -501,6 +503,41 @@ func (e *Engine) Search(term string) (SearchResults, error) {
 // Library returns the user's own albums and playlists.
 func (e *Engine) Library() (SearchResults, error) {
 	return e.results(libraryJS)
+}
+
+// Account is who the browser profile is signed in as. Name and Handle are empty
+// for a subscriber who never made an Apple Music profile.
+type Account struct {
+	Name       string `json:"name"`
+	Handle     string `json:"handle"`
+	Storefront string `json:"storefront"` // "United States"
+	Country    string `json:"country"`    // "us"
+}
+
+func (e *Engine) Account() (Account, error) {
+	var a Account
+	err := e.evalJSON(accountJS, &a)
+	return a, err
+}
+
+// SignOut drops the MusicKit user token, leaving the Apple ID cookies in the
+// profile — signing back in does not ask for a password.
+func (e *Engine) SignOut() error {
+	if err := e.do(signOutJS); err != nil {
+		return err
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if err := poll(e.ctx, mkSignedOut, 10*time.Second, "sign-out"); err != nil {
+		return err
+	}
+	// The token lives in localStorage and the browser is closed with SIGKILL,
+	// which can lose a write that just happened; clearing over CDP goes to the
+	// store directly, so the next launch cannot come back still signed in.
+	tctx, cancel := context.WithTimeout(e.ctx, 10*time.Second)
+	defer cancel()
+	return chromedp.Run(tctx,
+		cdpstorage.ClearDataForOrigin("https://music.apple.com", "local_storage"))
 }
 
 // Reload reloads music.apple.com in place — the un-wedge lever when the web

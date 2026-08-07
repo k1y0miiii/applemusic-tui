@@ -81,6 +81,36 @@ const stateJS = `(async () => {
   });
 })()`
 
+// accountJS reads who is signed in. The social profile is the only place Apple
+// puts a name — /v1/me/account carries an avatar and nothing else — and a user
+// who never created one has no profile, which is not an error, just no name.
+const accountJS = `(async () => {
+  const mk = MusicKit.getInstance();
+  const first = async (path) => {
+    try {
+      const r = await mk.api.music(path);
+      const d = r && r.data && r.data.data;
+      return (d && d[0]) || null;
+    } catch (e) {
+      return null;
+    }
+  };
+  const profile = await first('/v1/me/social-profile');
+  const store = await first('/v1/me/storefront');
+  const pa = (profile && profile.attributes) || {};
+  const sa = (store && store.attributes) || {};
+  return JSON.stringify({
+    name: pa.name || '',
+    handle: pa.handle || '',
+    storefront: sa.name || '',
+    country: (store && store.id) || mk.storefrontId || '',
+  });
+})()`
+
+// unauthorize() drops the MusicKit user token. It is fired rather than awaited
+// for the same reason as every other action here; SignOut waits on isAuthorized.
+const signOutJS = `(() => { MusicKit.getInstance().unauthorize(); return true; })()`
+
 // Actions are fire-and-forget: MusicKit promises sometimes never resolve
 // (awaiting them held the engine mutex until the 10s deadline), and the
 // 500ms state poll picks up the real result anyway. Rejections are recorded

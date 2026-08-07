@@ -77,6 +77,7 @@ var helpSections = []helpSection{
 	}},
 	{"OTHER", []helpEntry{
 		{"?", "this help"},
+		{"a", "account, sign out"},
 		{"R", "reload web player"},
 		{"q / ctrl+c", "quit"},
 	}},

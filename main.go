@@ -79,6 +79,11 @@ type (
 		id  string // recently-played entry the cover belongs to
 		img image.Image
 	}
+	accountMsg struct {
+		acct engine.Account
+		err  error
+	}
+	signedOutMsg        struct{ err error }
 	mprisQuitMsg        struct{}
 	visualizerOpenedMsg struct {
 		service *visualizer.Service
@@ -155,6 +160,12 @@ type model struct {
 	wv          wave        // recorded loudness across the current track
 
 	helpOpen bool // the ? overlay; any key dismisses it
+
+	// the a overlay: who is signed in, and the way back out
+	acctOpen    bool
+	acctLoading bool
+	acctBusy    bool // a sign-out is in flight
+	acct        engine.Account
 
 	// desktop integration; nil off Linux or without a session bus
 	mpris     *mpris.Server
@@ -647,6 +658,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.tileArt = map[string]image.Image{}
 		}
 		m.tileArt[msg.id] = msg.img // nil is a valid "tried and failed" marker
+	case accountMsg:
+		m.acctLoading = false
+		if msg.err == nil {
+			m.acct = msg.acct
+		}
+		// A failed lookup is not worth a banner: the overlay still shows
+		// "signed in" and the one thing it is there for still works.
+	case signedOutMsg:
+		m.acctOpen, m.acctBusy, m.acct = false, false, engine.Account{}
+		if msg.err != nil {
+			m.note, m.noteAt = "sign out failed: "+msg.err.Error(), m.t
+			return m, nil
+		}
+		return m.reconnect("signed out — sign in to Apple Music")
 	case tea.MouseMsg:
 		return m.updateMouse(msg)
 	case tea.KeyMsg:
@@ -655,6 +680,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.helpOpen {
 			m.helpOpen = false
 			return m, nil
+		}
+		if m.acctOpen {
+			return m.updateAccount(msg)
 		}
 		if m.searchOpen {
 			return m.updateSearch(msg)
@@ -737,6 +765,9 @@ func (m model) updateKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, doCmd(eng.CycleRepeat)
 	case "?":
 		m.helpOpen = true
+	case "a":
+		m.acctOpen, m.acctLoading = true, true
+		return m, accountCmd(eng)
 	case "v":
 		m.vizMode = (m.vizMode + 1) % vizModes
 		saveVizMode(m.vizMode)
@@ -1399,6 +1430,9 @@ func (m model) View() string {
 	}
 	if m.helpOpen {
 		return m.helpView()
+	}
+	if m.acctOpen {
+		return m.accountView()
 	}
 	if m.searchOpen {
 		return m.searchView()
