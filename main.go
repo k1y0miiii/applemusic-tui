@@ -1206,11 +1206,11 @@ func (m model) lyricsPanel(w, h int) string {
 	rows := h - 1
 	artCols, artRows := 0, 0
 	if configBool(m.cfg, "artwork.enabled", true) && m.art != nil {
-		artCols, artRows = artworkLayout(w, rows, configInt(m.cfg, "artwork.min_lyrics_width", 30))
+		artCols, artRows = artworkLayout(w, rows, configInt(m.cfg, "artwork.min_lyrics_width", 30), m.lyricsWidth())
 	}
 	textW := w
 	if artCols > 0 {
-		textW = w - artCols - 1
+		textW = w - artCols - artworkGap
 	}
 	text := m.lyricsText(textW, rows)
 	if artCols == 0 {
@@ -1230,9 +1230,25 @@ func (m model) lyricsPanel(w, h int) string {
 		if r >= top && r-top < len(cover) {
 			left = cover[r-top]
 		}
-		b.WriteString(left + " " + pad(line, textW) + "\n")
+		b.WriteString(left + strings.Repeat(" ", artworkGap) + pad(line, textW) + "\n")
 	}
 	return strings.TrimRight(b.String(), "\n")
+}
+
+// lyricsWidth is how many columns the lyrics actually use: the widest line plus
+// the one-column indent lyricsText draws. Zero when there are no lines, which
+// leaves the cover bounded by the configured minimum instead.
+func (m model) lyricsWidth() int {
+	n := 0
+	for _, l := range m.ly.Lines {
+		if w := lipgloss.Width(l.Text); w > n {
+			n = w
+		}
+	}
+	if n == 0 {
+		return 0
+	}
+	return n + 1
 }
 
 // lyricsText is the text column of the lyrics panel, sized independently of the

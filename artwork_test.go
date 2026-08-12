@@ -67,32 +67,46 @@ func TestRenderArtworkRejectsDegenerateSizes(t *testing.T) {
 }
 
 func TestArtworkLayout(t *testing.T) {
-	// Wide panel: cover takes 2 columns per row, capped at 24.
-	cols, rows := artworkLayout(68, 11, 30)
+	// Narrow panel: the cover is as tall as the panel and twice as wide.
+	cols, rows := artworkLayout(68, 11, 30, 0)
 	if rows != 11 || cols != 22 {
-		t.Errorf("artworkLayout(68,11,30) = (%d,%d), want (22,11)", cols, rows)
+		t.Errorf("artworkLayout(68,11,30,0) = (%d,%d), want (22,11)", cols, rows)
 	}
 
-	// Cap: a very tall panel must not produce a cover wider than 24.
-	cols, _ = artworkLayout(100, 20, 30)
-	if cols != 24 {
-		t.Errorf("cols = %d, want the 24-column cap", cols)
+	// Wide panel, short song lines: the cover grows into the space the lyrics
+	// leave empty instead of sitting at a fixed width.
+	cols, rows = artworkLayout(200, 30, 30, 40)
+	if cols != 60 || rows != 30 {
+		t.Errorf("artworkLayout(200,30,30,40) = (%d,%d), want (60,30) filling the panel height", cols, rows)
+	}
+
+	// Long song lines take priority: the cover shrinks to leave them room.
+	cols, rows = artworkLayout(100, 30, 30, 70)
+	if cols != 26 || rows != 13 {
+		t.Errorf("artworkLayout(100,30,30,70) = (%d,%d), want (26,13) left over by the lyrics", cols, rows)
+	}
+
+	// A long line on a narrow panel must not squeeze the cover away: it falls
+	// back to the base size as long as the lyrics keep their minimum.
+	cols, rows = artworkLayout(60, 20, 30, 47)
+	if cols != artworkBaseCols || rows != artworkBaseCols/2 {
+		t.Errorf("artworkLayout(60,20,30,47) = (%d,%d), want the %d-column base size", cols, rows, artworkBaseCols)
 	}
 
 	// Narrow panel: hiding the cover leaves the lyrics their full width.
-	cols, rows = artworkLayout(39, 11, 30)
+	cols, rows = artworkLayout(39, 11, 30, 0)
 	if cols != 0 || rows != 0 {
-		t.Errorf("artworkLayout(39,11,30) = (%d,%d), want (0,0)", cols, rows)
+		t.Errorf("artworkLayout(39,11,30,0) = (%d,%d), want (0,0)", cols, rows)
 	}
 }
 
 func TestArtworkLayoutRespectsMinLyricsWidth(t *testing.T) {
-	// 68 - 22 - 1 gap = 45 columns of lyrics: fits a 40 minimum, not a 50 one.
-	if cols, _ := artworkLayout(68, 11, 40); cols == 0 {
-		t.Error("cover hidden even though 45 columns remain for lyrics")
+	// 68 - 22 cover - 3 gap = 43 columns of lyrics: fits a 40 minimum, not a 50 one.
+	if cols, _ := artworkLayout(68, 11, 40, 0); cols == 0 {
+		t.Error("cover hidden even though 43 columns remain for lyrics")
 	}
-	if cols, _ := artworkLayout(68, 11, 50); cols != 0 {
-		t.Error("cover shown even though only 45 columns remain for lyrics")
+	if cols, _ := artworkLayout(68, 11, 50, 0); cols != 0 {
+		t.Error("cover shown even though only 43 columns remain for lyrics")
 	}
 }
 
@@ -132,15 +146,18 @@ func TestLyricsCoverSitsLeftOfTheText(t *testing.T) {
 		art: solidImage(32, 32, color.RGBA{200, 40, 40, 255}),
 		ly:  lyrics.Lyrics{Lines: []lyrics.Line{{Text: "UNIQUELYRICLINE"}}},
 	}
-	artCols, _ := artworkLayout(w, h-1, 30)
+	artCols, _ := artworkLayout(w, h-1, 30, m.lyricsWidth())
 	if artCols == 0 {
 		t.Fatal("artworkLayout gave no cover at a size that should fit one")
 	}
 
 	for i, line := range strings.Split(m.lyricsPanel(w, h), "\n") {
 		plain := lipgloss.NewStyle().Render(line)
-		if idx := strings.Index(plain, "UNIQUELYRICLINE"); idx >= 0 && idx < artCols {
-			t.Fatalf("line %d puts lyrics at column %d, inside the %d-column cover", i, idx, artCols)
+		// The lyrics must clear the cover and the gap after it: at one column of
+		// gap the text reads as glued to the artwork.
+		if idx := strings.Index(plain, "UNIQUELYRICLINE"); idx >= 0 && idx < artCols+artworkGap {
+			t.Fatalf("line %d puts lyrics at column %d, want at least %d (%d-column cover plus a %d-column gap)",
+				i, idx, artCols+artworkGap, artCols, artworkGap)
 		}
 	}
 }

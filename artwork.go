@@ -14,9 +14,10 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// artworkPx is the fetch size. Big enough for a ~24-column cover and for a
-// stable dominant-color histogram, small enough to decode in a few ms.
-const artworkPx = 128
+// artworkPx is the fetch size, and so the ceiling on the cover's detail: a
+// cover of N columns samples N pixels across and 2N down. The cover grows with
+// the panel, so this has to cover a tall terminal, not just a 24-column stamp.
+const artworkPx = 256
 
 // artworkTimeout bounds the cover fetch; artwork is decoration, never a stall.
 const artworkTimeout = 5 * time.Second
@@ -136,23 +137,38 @@ func renderArtwork(img image.Image, w, h int) []string {
 	return rows
 }
 
-// artworkMaxCols keeps the cover from dwarfing the lyrics on tall terminals.
-const artworkMaxCols = 24
+// artworkMinCols is where a cover stops being worth drawing: below this the
+// half-block sampling is mush, so the lyrics get the whole panel instead.
+const artworkMinCols = 16
+
+// artworkBaseCols is the size the cover always gets when the panel can fit it,
+// even when the song's lines are long. Only growth past it is negotiable.
+const artworkBaseCols = 24
+
+// artworkGap is the breathing room between the cover and the lyrics. One column
+// reads as the text being glued to the artwork's edge.
+const artworkGap = 3
 
 // artworkLayout sizes the cover for a lyrics panel of w columns and h rows.
-// Terminal cells are roughly 1:2, so a square needs cols = 2*rows. Returns
-// (0, 0) when the lyrics would be squeezed below minLyrics columns.
-func artworkLayout(w, h, minLyrics int) (cols, rows int) {
+// Terminal cells are roughly 1:2, so a square needs cols = 2*rows: the cover is
+// drawn as tall as the panel and only shrinks to leave the lyrics the width
+// they actually use — song lines are short, and a fixed cap left most of a wide
+// panel empty. lyricsWant is that used width; the lyrics never get less than
+// minLyrics. Returns (0, 0) when what is left over is too small to be a cover.
+func artworkLayout(w, h, minLyrics, lyricsWant int) (cols, rows int) {
 	if w <= 0 || h <= 0 {
 		return 0, 0
 	}
-	rows = h
-	cols = rows * 2
-	if cols > artworkMaxCols {
-		cols = artworkMaxCols
-		rows = cols / 2
+	if lyricsWant < minLyrics {
+		lyricsWant = minLyrics
 	}
-	if w-cols-1 < minLyrics {
+	// Width the cover may take: whatever the lyrics leave over, but never less
+	// than the base size — on a narrow panel one long line would otherwise
+	// squeeze the cover away entirely.
+	free := max(w-artworkGap-lyricsWant, artworkBaseCols)
+	rows = min(h, free/2)
+	cols = rows * 2
+	if cols < artworkMinCols || w-cols-artworkGap < minLyrics {
 		return 0, 0
 	}
 	return cols, rows
