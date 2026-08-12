@@ -37,7 +37,7 @@ func integrationChrome(t *testing.T) string {
 	return ""
 }
 
-func TestHiddenPageRemainsVisibleAfterParking(t *testing.T) {
+func TestParkedPageStaysVisibleAfterMinimize(t *testing.T) {
 	t.Setenv("AMTUI_CHROME", integrationChrome(t))
 	t.Setenv("AMTUI_DEBUG", "")
 
@@ -56,7 +56,9 @@ func TestHiddenPageRemainsVisibleAfterParking(t *testing.T) {
 	if err := chromedp.Run(testCtx, chromedp.Navigate("about:blank")); err != nil {
 		t.Fatalf("launch headed Chrome: %v", err)
 	}
-	if err := parkOffscreen(testCtx); err != nil {
+	// minimize is what the lifecycle calls once playback is up; on darwin it
+	// must park rather than hide, or the next track never loads.
+	if err := (darwinWindowController{}).minimize(testCtx); err != nil {
 		t.Fatalf("park Chrome window: %v", err)
 	}
 

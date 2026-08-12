@@ -144,26 +144,26 @@ func minimizedWindowBounds() *cdpbrowser.Bounds {
 	return &cdpbrowser.Bounds{WindowState: cdpbrowser.WindowStateMinimized}
 }
 
-// parkOffscreen keeps the headed browser playable while moving almost all of
-// its normal window outside the visible desktop.
-func parkOffscreen(ctx context.Context) error {
+// setWindowBounds is a var so window controller tests can watch what bounds a
+// platform asks for without a real browser.
+var setWindowBounds = func(ctx context.Context, b *cdpbrowser.Bounds) error {
 	return chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
 		id, _, err := cdpbrowser.GetWindowForTarget().Do(ctx)
 		if err != nil {
 			return err
 		}
-		return cdpbrowser.SetWindowBounds(id, parkedWindowBounds()).Do(ctx)
+		return cdpbrowser.SetWindowBounds(id, b).Do(ctx)
 	}))
 }
 
+// parkOffscreen keeps the headed browser playable while moving almost all of
+// its normal window outside the visible desktop.
+func parkOffscreen(ctx context.Context) error {
+	return setWindowBounds(ctx, parkedWindowBounds())
+}
+
 func minimizeWindow(ctx context.Context) error {
-	return chromedp.Run(ctx, chromedp.ActionFunc(func(ctx context.Context) error {
-		id, _, err := cdpbrowser.GetWindowForTarget().Do(ctx)
-		if err != nil {
-			return err
-		}
-		return cdpbrowser.SetWindowBounds(id, minimizedWindowBounds()).Do(ctx)
-	}))
+	return setWindowBounds(ctx, minimizedWindowBounds())
 }
 
 func playableWindowBounds(current *cdpbrowser.Bounds, park bool) *cdpbrowser.Bounds {

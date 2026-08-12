@@ -59,5 +59,5 @@ func newWindowController(pid int) windowController {
 	if pid > 0 && os.Getenv("HYPRLAND_INSTANCE_SIGNATURE") != "" && hyprctlAvailable() {
 		return hyprlandWindowController{pid: pid}
 	}
-	return cdpWindowController{}
+	return defaultWindowController()
 }
