@@ -27,8 +27,24 @@ var hyprctlAvailable = func() bool {
 type hyprlandWindowController struct{ pid int }
 
 func (h hyprlandWindowController) hide(ctx context.Context) error {
+	// Hyprland 0.56 replaced the keybind dispatchers with a Lua API, so the
+	// legacy `dispatch movetoworkspacesilent special:amtui,pid:N` form no
+	// longer parses (exit status 7). Try the Lua form first, then fall back
+	// for Hyprland versions that still use the string dispatcher.
+	if err := hyprctlRun(ctx, "eval", hyprlandHideScript(h.pid)); err == nil {
+		return nil
+	}
 	return hyprctlRun(ctx, "dispatch", "movetoworkspacesilent",
 		fmt.Sprintf("special:amtui,pid:%d", h.pid))
+}
+
+// hyprlandHideScript moves the window owning pid to the hidden special
+// workspace without following it. hl.get_window resolves the pid selector;
+// a missing window is left alone rather than moving whatever is focused.
+func hyprlandHideScript(pid int) string {
+	return fmt.Sprintf(`local w = hl.get_window("pid:%d")
+if not w then return end
+hl.dispatch(hl.dsp.window.move({ window = w, workspace = "special:amtui", follow = false }))`, pid)
 }
 
 func (h hyprlandWindowController) parkOffscreen(ctx context.Context) error {

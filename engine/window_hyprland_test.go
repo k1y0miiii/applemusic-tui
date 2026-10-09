@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -29,9 +30,35 @@ func TestHyprlandControllerHidesIntoSpecialWorkspaceByPID(t *testing.T) {
 		t.Fatalf("parkOffscreen: %v", err)
 	}
 
-	want := "dispatch movetoworkspacesilent special:amtui,pid:42"
+	want := "eval " + hyprlandHideScript(42)
 	if len(*calls) != 2 || (*calls)[0] != want || (*calls)[1] != want {
 		t.Fatalf("hyprctl calls = %q, want two of %q", *calls, want)
+	}
+}
+
+func TestHyprlandControllerFallsBackToLegacyDispatch(t *testing.T) {
+	var calls []string
+	orig := hyprctlRun
+	hyprctlRun = func(ctx context.Context, args ...string) error {
+		calls = append(calls, strings.Join(args, " "))
+		if args[0] == "eval" {
+			return errors.New("hyprctl eval unsupported")
+		}
+		return nil
+	}
+	t.Cleanup(func() { hyprctlRun = orig })
+
+	h := hyprlandWindowController{pid: 42}
+	if err := h.hide(context.Background()); err != nil {
+		t.Fatalf("hide: %v", err)
+	}
+
+	want := []string{
+		"eval " + hyprlandHideScript(42),
+		"dispatch movetoworkspacesilent special:amtui,pid:42",
+	}
+	if len(calls) != len(want) || calls[0] != want[0] || calls[1] != want[1] {
+		t.Fatalf("hyprctl calls = %q, want %q", calls, want)
 	}
 }
 
