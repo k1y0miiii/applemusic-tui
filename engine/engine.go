@@ -309,16 +309,21 @@ func Connect(status func(string)) (*Engine, error) {
 			closeAll(vcancels)
 			return nil, err
 		}
-		status("login detected — restarting browser…")
-		closeAll(vcancels)
-		ctx, cancels, err = open(dir, visible)
+		// Keep the browser that just authenticated. Closing it and reopening
+		// the profile races Chromium's on-disk session flush: the process is
+		// killed (SIGKILL) before it persists the MusicKit cookies, so the
+		// fresh instance loads signed out and the session poll times out.
+		// Parking this window keeps the live session and lands in the same
+		// hidden state.
+		status("login detected — parking browser…")
+		pctx, pcancel := context.WithTimeout(vctx, 5*time.Second)
+		err = newWindowController(browserPID(vctx)).parkOffscreen(pctx)
+		pcancel()
 		if err != nil {
-			return nil, err
+			closeAll(vcancels)
+			return nil, fmt.Errorf("parking browser window: %w", err)
 		}
-		if err := poll(ctx, mkAuthorized, 90*time.Second, "session"); err != nil {
-			closeAll(cancels)
-			return nil, err
-		}
+		ctx, cancels = vctx, vcancels
 	}
 	var ok bool
 	_ = chromedp.Run(ctx, chromedp.Evaluate(autoplayJS, &ok))
