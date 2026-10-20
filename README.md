@@ -88,6 +88,8 @@ through the system mixer (the web player serves AAC 256; no lossless).
   - macOS: any recent Chrome/Chromium
   - Linux: a Widevine-capable browser — `google-chrome`, or Chromium with the
     Widevine plugin (e.g. `chromium-widevine` on the AUR)
+  - Windows: Google Chrome or Microsoft Edge (auto-detected; `AMTUI_CHROME`
+    overrides)
 - **macOS 14.2+** (the live visualizer uses a CoreAudio process tap),
   or **Linux** with `pipewire-pulse` (or plain PulseAudio) for live capture
 
@@ -96,10 +98,10 @@ through the system mixer (the web player serves AAC 256; no lossless).
 > special workspace (Wayland forbids offscreen positioning); other Wayland
 > compositors may leave the window visible for now.
 
-> Windows binaries are **untested and incomplete**: they build and the player
-> works, but there is no system-audio capture backend on Windows, so the
-> visualizer always runs in its labeled simulated mode. Use Windows Terminal —
-> the legacy console does not render the TUI correctly. Reports welcome.
+> Windows is now built and tested in CI, but there is still no system-audio
+> capture backend, so the visualizer always runs in its labeled simulated
+> mode. Use Windows Terminal — the legacy console does not render the TUI
+> correctly. From Git Bash, run it with `winpty amtui`.
 
 ## Install
 
@@ -120,6 +122,12 @@ Every release ships a `SHA256SUMS` file; verify with `shasum -a 256 -c SHA256SUM
 
 macOS binaries are unsigned, so the first launch needs
 `xattr -d com.apple.quarantine amtui` (or right-click → Open).
+
+Windows: unzip the archive and run `amtui.exe` from Windows Terminal or
+PowerShell. The binary is unsigned, so SmartScreen may say "Windows protected
+your PC" — click More info → Run anyway. If Defender quarantines it (a known
+false positive for stripped Go binaries), build from source with `install.ps1`
+instead.
 
 ### From source
 
@@ -142,6 +150,20 @@ Prefer doing it by hand? `go build -o amtui .` works too; a `CGO_ENABLED=0`
 build runs the visualizer in simulated mode instead of capturing real audio.
 
 Run the test suite with `make test`, or `make verify` for the full check.
+
+#### Windows
+
+```powershell
+git clone https://github.com/k1y0miiii/applemusic-tui
+cd applemusic-tui
+powershell -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+The script builds `amtui` from source and installs it (plus `applemusic` and
+`applemusic-tui` shims) into `%LOCALAPPDATA%\Programs\amtui`, adding that
+directory to your user PATH. `-Prefix DIR` installs elsewhere, `-NoPath`
+leaves your PATH alone. Needs Go 1.26+ and Git on PATH; no admin rights
+required.
 
 > Building all release archives yourself: `make dist`. macOS is the only host
 > that produces a complete set — the darwin builds need cgo for the CoreAudio
@@ -279,7 +301,7 @@ pulse, the waveform progress bar and the album art on or off.
 
 | Environment variable | Effect |
 | --- | --- |
-| `AMTUI_CHROME` | Path to the Chrome/Chromium binary (overrides auto-detection) |
+| `AMTUI_CHROME` | Path to the Chrome/Chromium binary (overrides auto-detection; also covers Microsoft Edge on Windows) |
 | `AMTUI_CONFIG_DIR` | Config directory (default `~/.config/amtui`) |
 | `AMTUI_DEBUG` | Run the browser visibly, with verbose logging |
 

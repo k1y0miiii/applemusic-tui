@@ -88,6 +88,8 @@
   - macOS: любой свежий Chrome/Chromium
   - Linux: браузер с Widevine — `google-chrome` или Chromium с плагином
     Widevine (например, `chromium-widevine` из AUR)
+  - Windows: Google Chrome или Microsoft Edge (определяются автоматически,
+    `AMTUI_CHROME` переопределяет)
 - **macOS 14.2+** (живой визуализатор использует CoreAudio process tap)
   или **Linux** с `pipewire-pulse` (или обычным PulseAudio) для живого захвата
 
@@ -96,10 +98,10 @@
 > прячется в special workspace (Wayland запрещает уводить окна за экран);
 > на других Wayland-композиторах окно пока может оставаться видимым.
 
-> Windows-бинарники **не протестированы и неполны**: они собираются и плеер
-> работает, но бэкенда захвата системного звука под Windows нет, поэтому
-> визуализатор всегда идёт в честно подписанном режиме симуляции. Нужен
-> Windows Terminal — старая консоль рисует TUI некорректно. Отчёты приветствуются.
+> Windows теперь собирается и проверяется в CI, но бэкенда захвата системного
+> звука под Windows по-прежнему нет, поэтому визуализатор всегда идёт в честно
+> подписанном режиме симуляции. Нужен Windows Terminal — старая консоль рисует
+> TUI некорректно. Из Git Bash запускайте через `winpty amtui`.
 
 ## Установка
 
@@ -121,6 +123,12 @@ amtui --version
 
 Бинарники под macOS не подписаны, поэтому перед первым запуском нужно
 `xattr -d com.apple.quarantine amtui` (или правый клик → «Открыть»).
+
+Windows: распакуйте архив и запустите `amtui.exe` из Windows Terminal или
+PowerShell. Бинарник не подписан, поэтому SmartScreen может показать
+«Windows защитила ваш компьютер» — нажмите «Подробнее» → «Выполнить в любом
+случае». Если Defender унёс файл в карантин (известное ложное срабатывание
+на урезанных Go-бинарниках) — соберите из исходников через `install.ps1`.
 
 ### Из исходников
 
@@ -145,6 +153,20 @@ zsh / bash / fish. `--prefix DIR` — установить в другой ка�
 звука.
 
 Тесты — `make test`, полная проверка — `make verify`.
+
+#### Windows
+
+```powershell
+git clone https://github.com/k1y0miiii/applemusic-tui
+cd applemusic-tui
+powershell -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+Скрипт собирает `amtui` из исходников и ставит его (плюс алиасы `applemusic`
+и `applemusic-tui`) в `%LOCALAPPDATA%\Programs\amtui`, добавляя этот каталог
+в пользовательский PATH. `-Prefix DIR` — установить в другой каталог,
+`-NoPath` — не трогать PATH. Нужны Go 1.26+ и Git в PATH; права
+администратора не требуются.
 
 > Собрать все релизные архивы самому: `make dist`. Полный набор получается
 > только на macOS — darwin-сборкам нужен cgo для CoreAudio-визуализатора, а
@@ -282,7 +304,7 @@ amtui lastfm-auth
 
 | Переменная окружения | Эффект |
 | --- | --- |
-| `AMTUI_CHROME` | Путь к бинарнику Chrome/Chromium (вместо автоопределения) |
+| `AMTUI_CHROME` | Путь к бинарнику Chrome/Chromium (вместо автоопределения; на Windows подходит и Edge) |
 | `AMTUI_CONFIG_DIR` | Каталог конфигурации (по умолчанию `~/.config/amtui`) |
 | `AMTUI_DEBUG` | Запустить браузер видимым, с подробными логами |
 
