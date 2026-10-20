@@ -86,7 +86,7 @@ func launch(dir string, visible bool) (context.Context, []context.CancelFunc) {
 		chromedp.Flag("disable-ipc-flooding-protection", true),
 		chromedp.Flag("disable-features", "IntensiveWakeUpThrottling"),
 	}
-	if p := os.Getenv("AMTUI_CHROME"); p != "" {
+	if p := browserPath(); p != "" {
 		opts = append(opts, chromedp.ExecPath(p))
 	}
 	if os.Getenv("AMTUI_DEBUG") != "" {
@@ -116,7 +116,7 @@ func open(dir string, visible bool) (context.Context, []context.CancelFunc, erro
 	ctx, cancels := launch(dir, visible)
 	if err := chromedp.Run(ctx, chromedp.Navigate("https://music.apple.com/")); err != nil {
 		closeAll(cancels)
-		return nil, nil, fmt.Errorf("launching browser: %w (set AMTUI_CHROME to your Chrome binary if not found)", err)
+		return nil, nil, fmt.Errorf("launching browser: %w (install Google Chrome — or Microsoft Edge on Windows — or set AMTUI_CHROME to the browser binary)", err)
 	}
 	if !visible {
 		tctx, cancel := context.WithTimeout(ctx, 5*time.Second)

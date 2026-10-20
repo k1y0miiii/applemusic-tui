@@ -1,0 +1,67 @@
+name: windows
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # The release cross-compiles the Windows archives on macOS and never runs
+  # them, which is how a Windows build that could not find a browser shipped.
+  # This job builds, tests and installs on a real Windows host instead; the
+  # hosted image ships both Chrome and Edge.
+  windows:
+    runs-on: windows-latest
+    env:
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # install.ps1 labels the build with git describe
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          check-latest: true
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...
+
+      - name: Browser window integration
+        run: go test -tags integration -run Windows -v ./engine
+
+      - name: install.ps1 on Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          $p = "$env:RUNNER_TEMP\amtui-ps5"
+          .\install.ps1 -Prefix $p -NoPath
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & "$p\amtui.exe" --version
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & "$p\applemusic.cmd" --version
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      # Runs twice: the second pass must replace the exe in place and leave
+      # exactly one PATH entry behind.
+      - name: install.ps1 on PowerShell 7, with PATH
+        shell: pwsh
+        run: |
+          $p = "$env:RUNNER_TEMP\amtui-ps7"
+          foreach ($pass in 1, 2) {
+            .\install.ps1 -Prefix $p
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          }
+          $raw = (Get-Item 'HKCU:\Environment').GetValue('Path', '', 'DoNotExpandEnvironmentNames')
+          $hits = @($raw -split ';' | Where-Object { $_.TrimEnd('\') -eq $p })
+          if ($hits.Count -ne 1) { throw "user PATH has $($hits.Count) entries for $p" }
+          amtui --version
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          applemusic-tui --version
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }

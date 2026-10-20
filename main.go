@@ -1428,8 +1428,11 @@ func (m model) bootView() string {
 	sub := lipgloss.NewStyle().Foreground(fgFaint).Render("apple music in your terminal")
 	var line string
 	if m.phase == phaseFail {
-		line = lipgloss.NewStyle().Foreground(accent).Render("✕ "+m.status) +
+		full := lipgloss.NewStyle().Foreground(accent).Render("✕ "+m.status) +
 			lipgloss.NewStyle().Foreground(fgFaint).Render("  ·  q quit")
+		// Wrap instead of letting the fixed-grid renderer clip long errors —
+		// open()'s AMTUI_CHROME hint must stay readable on an 80-col terminal.
+		line = lipgloss.NewStyle().Width(max(1, min(m.w-4, 76))).Render(full)
 	} else {
 		sp := []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
 		line = lipgloss.NewStyle().Foreground(fgDim).
@@ -1509,6 +1512,9 @@ func main() {
 	// wheel, and all-motion floods the loop with a message per pointer move.
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	if _, err := p.Run(); err != nil {
+		if runtime.GOOS == "windows" {
+			log.Fatalf("%v (amtui needs a Windows console — run it in Windows Terminal or PowerShell; from Git Bash/mintty: winpty amtui)", err)
+		}
 		log.Fatal(err)
 	}
 }

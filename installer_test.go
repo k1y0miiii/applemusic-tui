@@ -5,9 +5,19 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
+
+// requireUnixShell skips install.sh tests on Windows: the script is run via
+// "sh" and leans on symlinks and POSIX permission bits that don't exist there.
+func requireUnixShell(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("install.sh is a POSIX shell script; not run on Windows")
+	}
+}
 
 const (
 	startMarker = "# >>> amtui installer >>>"
@@ -422,6 +432,7 @@ func TestInstallScriptUsesZDOTDIRAndPrintsSafeSourceInstruction(t *testing.T) {
 }
 
 func TestInstallScriptHelpWorksWithoutHome(t *testing.T) {
+	requireUnixShell(t)
 	cmd := exec.Command("sh", "./install.sh", "--help")
 	cmd.Env = []string{"PATH=/usr/bin:/bin:/usr/sbin:/sbin", "LANG=C", "LC_ALL=C"}
 	output, err := cmd.CombinedOutput()
@@ -590,6 +601,7 @@ func TestInstallScriptSupportsCustomPrefixWithoutPathMutation(t *testing.T) {
 
 func newInstallerTestEnv(t *testing.T, shell, osName string) *installerTestEnv {
 	t.Helper()
+	requireUnixShell(t)
 	root := t.TempDir()
 	testEnv := &installerTestEnv{
 		root:    root,

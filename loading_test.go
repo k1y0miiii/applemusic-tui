@@ -5,9 +5,28 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/k1y0miiii/applemusic-tui/engine"
 )
+
+func TestBootFailStatusIsNotClippedAtTerminalWidth(t *testing.T) {
+	m := model{
+		w:      80,
+		h:      24,
+		phase:  phaseFail,
+		status: `launching browser: exec: "google-chrome": executable file not found in %PATH% (install Google Chrome — or Microsoft Edge on Windows — or set AMTUI_CHROME to the browser binary)`,
+	}
+
+	rendered := ansi.Strip(m.View())
+	for _, want := range []string{
+		"google-chrome", "not found", "AMTUI_CHROME", "q quit",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("View() missing %q, got:\n%s", want, rendered)
+		}
+	}
+}
 
 func TestPlaybackKeysBlockedWhileAudioInitializes(t *testing.T) {
 	keys := map[string]tea.KeyMsg{
