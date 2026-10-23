@@ -67,13 +67,13 @@ var helpSections = []helpSection{
 	}},
 	{"IN SEARCH", []helpEntry{
 		{"↵", "search / play"},
-		{"tab", "next category"},
+		{"tab / esc", "next cat / close"},
 		{"a / A", "queue end / next"},
-		{"esc", "close"},
 	}},
 	{"LOOK", []helpEntry{
 		{"v", "bars/torus/sphere"},
 		{"t", "cycle theme"},
+		{"Q", "equalizer"},
 	}},
 	{"OTHER", []helpEntry{
 		{"?", "this help"},

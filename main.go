@@ -161,6 +161,11 @@ type model struct {
 
 	helpOpen bool // the ? overlay; any key dismisses it
 
+	// EQ panel, swapped in for the visualizer by Q; gains persisted to disk
+	eqOpen  bool
+	eqGains [10]int
+	eqSel   int
+
 	// the a overlay: who is signed in, and the way back out
 	acctOpen    bool
 	acctLoading bool
@@ -617,6 +622,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					cmd = tea.Batch(cmd, fetchArtworkCmd(id, tmpl))
 				}
 			}
+			// A non-flat EQ that is not yet attached to the current <audio>
+			// element covers first playback, element swaps and page
+			// reloads/reconnects with one mechanism: just keep re-asking.
+			if m.st.Now.ID != "" && !m.st.EQ && !eqIsFlat(m.eqGains) {
+				eng, gains := m.eng, m.eqGains
+				cmd = tea.Batch(cmd, doCmd(func() error { return eng.SetEQ(gains) }))
+			}
 		}
 		poll := tea.Tick(500*time.Millisecond, func(time.Time) tea.Msg { return pollMsg{} })
 		return m, tea.Batch(poll, cmd)
@@ -741,6 +753,39 @@ func (m model) updateKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	eng := m.eng
+	if m.eqOpen {
+		switch msg.String() {
+		case "esc", "Q":
+			m.eqOpen = false
+			return m, nil
+		case "up", "k":
+			m.eqSel = (m.eqSel + 9) % 10
+			return m, nil
+		case "down", "j":
+			m.eqSel = (m.eqSel + 1) % 10
+			return m, nil
+		case "left", "h":
+			m.eqGains[m.eqSel] = clampEQGain(m.eqGains[m.eqSel] - 1)
+			saveEQGains(m.eqGains)
+			gains := m.eqGains
+			return m, doCmd(func() error { return eng.SetEQ(gains) })
+		case "right", "l":
+			m.eqGains[m.eqSel] = clampEQGain(m.eqGains[m.eqSel] + 1)
+			saveEQGains(m.eqGains)
+			gains := m.eqGains
+			return m, doCmd(func() error { return eng.SetEQ(gains) })
+		case "P":
+			m.eqGains = nextEQPreset(m.eqGains)
+			saveEQGains(m.eqGains)
+			gains := m.eqGains
+			return m, doCmd(func() error { return eng.SetEQ(gains) })
+		case "0":
+			m.eqGains = [10]int{}
+			saveEQGains(m.eqGains)
+			gains := m.eqGains
+			return m, doCmd(func() error { return eng.SetEQ(gains) })
+		}
+	}
 	switch msg.String() {
 	case "q", "ctrl+c":
 		m.closeVisualizerAsync()
@@ -774,6 +819,8 @@ func (m model) updateKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.vizMode = (m.vizMode + 1) % vizModes
 		saveVizMode(m.vizMode)
 		m.note, m.noteAt = "visualizer · "+vizModeName(m.vizMode), m.t
+	case "Q":
+		m.eqOpen = true
 	case "t":
 		next := nextTheme(m.themeName)
 		m.themeName = next.name
@@ -1467,8 +1514,14 @@ func (m model) View() string {
 			panel(m.recentTitle(), m.recentPanel(lay.qw, lay.recH-2), lay.qw, lay.recH-2,
 				m.focus == focusRecent, m.pulsedAccent()))
 	}
-	viz := panel(m.visualizerTitle(), m.vizPanel(lay.vw, lay.vh-2), lay.vw, lay.vh-2,
-		false, m.pulsedAccent())
+	var vizTitle, vizBody string
+	if m.eqOpen {
+		vizTitle = "EQ · " + eqPresetName(m.eqGains) + "  ·  P preset · 0 flat"
+		vizBody = eqPanel(lay.vw, lay.vh-2, m.eqGains, m.eqSel)
+	} else {
+		vizTitle, vizBody = m.visualizerTitle(), m.vizPanel(lay.vw, lay.vh-2)
+	}
+	viz := panel(vizTitle, vizBody, lay.vw, lay.vh-2, false, m.pulsedAccent())
 	lyr := panel("LYRICS", m.lyricsPanel(lay.vw, lay.lh), lay.vw, lay.lh, false, m.pulsedAccent())
 	right := lipgloss.JoinVertical(lipgloss.Left, viz, lyr)
 	top := lipgloss.JoinHorizontal(lipgloss.Top, left, right)
@@ -1503,6 +1556,7 @@ func main() {
 	}
 	m.cfg = loadConfig()
 	m.vizMode = loadVizMode()
+	m.eqGains = loadEQGains()
 	m.scrobbler = newScrobbler(m.cfg)
 	m.artCache = newArtCache(8)
 	t := themeFromConfig(m.cfg, loadThemeName())

@@ -56,6 +56,9 @@ which changes what is possible:
   a config file, plus an `auto` mode that pulls the accent from the artwork.
 - **Transport** — play/pause, next/prev, seek, volume, shuffle, repeat, and a
   progress bar drawn as the waveform of what you have already heard.
+- **10-band equalizer** — real Web Audio filters on the playback chain, `Q` to
+  swap the visualizer for it, presets cycled with `P`, gains persisted across
+  runs.
 - **Safe sign-in** — you log in inside a real browser window; your Apple ID
   credentials never touch the terminal.
 

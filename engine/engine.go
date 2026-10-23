@@ -37,6 +37,7 @@ type State struct {
 	Now          Track
 	Queue        []Track
 	QueuePos     int
+	EQ           bool   // the Web Audio EQ graph is attached to the current <audio> element
 	Err          string // last swallowed action rejection, read-and-clear
 }
 
@@ -419,6 +420,7 @@ func (e *Engine) State() (State, error) {
 		Initializing bool      `json:"initializing"`
 		EngineReady  bool      `json:"engineReady"`
 		HiddenStall  bool      `json:"hiddenStall"`
+		EQ           bool      `json:"eq"`
 		Pos          float64   `json:"pos"`
 		Dur          float64   `json:"dur"`
 		Volume       int       `json:"volume"`
@@ -439,7 +441,7 @@ func (e *Engine) State() (State, error) {
 		Pos:          time.Duration(raw.Pos * float64(time.Second)),
 		Dur:          time.Duration(raw.Dur * float64(time.Second)),
 		Volume:       raw.Volume, Shuffle: raw.Shuffle, Repeat: raw.Repeat,
-		QueuePos: raw.QueuePos, Queue: tracks(raw.Queue), Err: raw.Err,
+		QueuePos: raw.QueuePos, Queue: tracks(raw.Queue), EQ: raw.EQ, Err: raw.Err,
 	}
 	if raw.Now != nil {
 		st.Now = raw.Now.track()
@@ -460,6 +462,27 @@ func (e *Engine) SeekTo(d time.Duration) error {
 }
 func (e *Engine) SetVolume(v int) error {
 	return e.do(fmt.Sprintf(volumeJS, float64(min(max(v, 0), 100))/100))
+}
+
+// eqPreampDB is the anti-clip preamp: pull everything down by the loudest
+// boost so the chain's peak output never exceeds the unprocessed signal.
+func eqPreampDB(gains [10]int) float64 {
+	max := 0
+	for _, g := range gains {
+		if g > max {
+			max = g
+		}
+	}
+	return float64(-max)
+}
+
+// SetEQ attaches/updates the 10-band Web Audio EQ graph.
+func (e *Engine) SetEQ(gains [10]int) error {
+	b, err := json.Marshal(gains)
+	if err != nil {
+		return err
+	}
+	return e.do(fmt.Sprintf(eqJS, string(b), eqPreampDB(gains)))
 }
 
 var kinds = map[string]bool{"song": true, "album": true, "playlist": true}

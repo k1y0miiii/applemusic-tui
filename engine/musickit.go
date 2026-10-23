@@ -70,6 +70,7 @@ const stateJS = `(async () => {
     initializing,
     engineReady,
     hiddenStall,
+    eq: !!(window.__amtuiEQ && audio && window.__amtuiEQ.graphs.has(audio)),
     pos: mk.currentPlaybackTime || 0,
     dur: mk.currentPlaybackDuration || 0,
     volume: Math.round((mk.volume || 0) * 100),
@@ -213,6 +214,62 @@ const seekJS = `(() => {
 })()`
 
 const volumeJS = `(() => { MusicKit.getInstance().volume = %f; return true; })()`
+
+// eqJS builds/updates a Web Audio graph on the current <audio> element: a
+// preamp GainNode (anti-clip headroom) feeding 10 BiquadFilterNodes (low/high
+// shelf on the ends, peaking in between) into the destination. The
+// AudioContext is shared (window.__amtuiEQ) but the graph is per-element,
+// since createMediaElementSource can only be called once per element; a
+// WeakMap keys the graph by element so a track change or reload reuses it
+// instead of throwing. An element that failed once (already wired by someone
+// else, Context creation blocked, …) is remembered and never retried.
+const eqJS = `(() => {
+  try {
+    const gains = %s;
+    const preampDb = %f;
+    const freqs = [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+    const state = window.__amtuiEQ || (window.__amtuiEQ = {
+      ctx: null, graphs: new WeakMap(), failed: new WeakSet(),
+    });
+    const audio = document.querySelector('audio');
+    if (!audio) return true; // nothing to attach to yet — next poll retries
+    if (state.failed.has(audio)) return true;
+    if (!state.ctx) {
+      state.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    const ctx = state.ctx;
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+    let g = state.graphs.get(audio);
+    if (!g) {
+      const source = ctx.createMediaElementSource(audio);
+      const preamp = ctx.createGain();
+      const filters = freqs.map((f, i) => {
+        const filt = ctx.createBiquadFilter();
+        filt.frequency.value = f;
+        filt.Q.value = 1.41;
+        filt.type = i === 0 ? 'lowshelf' : i === freqs.length - 1 ? 'highshelf' : 'peaking';
+        return filt;
+      });
+      source.connect(preamp);
+      let node = preamp;
+      for (const filt of filters) {
+        node.connect(filt);
+        node = filt;
+      }
+      node.connect(ctx.destination);
+      g = { preamp, filters };
+      state.graphs.set(audio, g);
+    }
+    g.preamp.gain.value = Math.pow(10, preampDb / 20);
+    gains.forEach((db, i) => { g.filters[i].gain.value = db; });
+    return true;
+  } catch (e) {
+    const audio = document.querySelector('audio');
+    if (audio && window.__amtuiEQ) window.__amtuiEQ.failed.add(audio);
+    window.__amtuiErr = 'eq: ' + ((e && e.message) || e);
+    return true;
+  }
+})()`
 
 const shuffleJS = `(() => {
   const mk = MusicKit.getInstance();
