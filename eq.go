@@ -106,6 +106,8 @@ func saveEQGains(gains [10]int) {
 	_ = os.WriteFile(p, []byte(strings.Join(parts, " ")+"\n"), 0o644)
 }
 
+// eqBandLabel is the short per-column label in the EQ panel's body: "32",
+// "64", …, "1k", …, "16k".
 func eqBandLabel(i int) string {
 	f := eqFreqs[i]
 	if f >= 1000 {
@@ -114,83 +116,136 @@ func eqBandLabel(i int) string {
 	return fmt.Sprintf("%d", f)
 }
 
-// eqBar renders one band's ±12 dB gain as a horizontal bar centered on a 0 dB
-// line: it grows right for boost, left for cut, with eighth-block partials on
-// the boost side for sub-cell precision. The cut side only gets a right half-block
-// partial — Unicode has no right-anchored eighths to mirror the boost ones,
-// and a second lookup table was not worth it for a cosmetic bar.
-func eqBar(barW, gain int) string {
-	if barW < 3 {
-		return strings.Repeat(" ", max(0, barW))
+// eqBandFreqLabel is the long form for the title: "32 HZ", …, "1 KHZ", ….
+func eqBandFreqLabel(i int) string {
+	f := eqFreqs[i]
+	if f >= 1000 {
+		return fmt.Sprintf("%d KHZ", f/1000)
 	}
-	center := barW / 2
-	left := []rune(strings.Repeat(" ", center))
-	right := []rune(strings.Repeat(" ", barW-center-1))
-	const maxDB = 12.0
-	mag := float64(gain) / maxDB
-	eighths := []rune(" ▏▎▍▌▋▊▉█")
+	return fmt.Sprintf("%d HZ", f)
+}
+
+func eqGainLabel(g int) string {
 	switch {
-	case mag > 0:
-		if mag > 1 {
-			mag = 1
-		}
-		cells := mag * float64(len(right))
-		full := int(cells)
-		for i := 0; i < full && i < len(right); i++ {
-			right[i] = '█'
-		}
-		if full < len(right) {
-			if idx := int((cells-float64(full))*8 + 0.5); idx > 0 {
-				right[full] = eighths[idx]
+	case g > 0:
+		return fmt.Sprintf("+%d DB", g)
+	case g < 0:
+		return fmt.Sprintf("%d DB", g) // already carries its own minus sign
+	default:
+		return "0 DB"
+	}
+}
+
+// eqTitle matches the visualizer's "VISUALIZER · LIVE · COREAUDIO" style.
+func eqTitle(gains [10]int, sel int) string {
+	return fmt.Sprintf("EQUALIZER · %s · %s %s",
+		strings.ToUpper(eqPresetName(gains)), eqBandFreqLabel(sel), eqGainLabel(gains[sel]))
+}
+
+// eqHints replaces the transport bar's hint line while the EQ panel is shown.
+const eqHints = "←→ band · ↑↓ gain · P preset · 0 flat · esc close "
+
+// eqBarHeight maps a ±12 dB gain onto the same row-height units vizPanel's
+// bar logic expects: z is the row the 0 dB line sits on (half the bar area),
+// barRows the total bar rows. A cut shrinks toward 0 at -12 dB, a boost grows
+// toward barRows at +12 dB.
+func eqBarHeight(gain, z, barRows int) float64 {
+	if gain <= 0 {
+		return float64(z) + float64(gain)/12*float64(z)
+	}
+	return float64(z) + float64(gain)/12*float64(barRows-z)
+}
+
+// centerInWidth pads s to w, centered; s itself is returned unpadded if it
+// does not fit — the caller's final pad() to the panel width still clips it.
+func centerInWidth(s string, w int) string {
+	sw := lipgloss.Width(s)
+	if sw >= w {
+		return s
+	}
+	left := (w - sw) / 2
+	return strings.Repeat(" ", left) + s + strings.Repeat(" ", w-sw-left)
+}
+
+func eqLabelRow(w, colW, sel int) string {
+	// Columns narrower than "125"/"16k" can't hold frequencies without
+	// drifting off their bars; the title names the band, so just point at it.
+	narrow := colW < 3
+	var row strings.Builder
+	for i := 0; i < len(eqFreqs); i++ {
+		lbl := eqBandLabel(i)
+		st := lipgloss.NewStyle().Foreground(fgDim)
+		if i == sel {
+			st = lipgloss.NewStyle().Foreground(accentHi).Bold(true)
+			if len(lbl)+2 <= colW {
+				lbl = "[" + lbl + "]"
 			}
 		}
-	case mag < 0:
-		if mag < -1 {
-			mag = -1
+		if narrow {
+			lbl = ""
+			if i == sel {
+				lbl = "▲"
+			}
 		}
-		cells := -mag * float64(len(left))
-		full := int(cells)
-		for i := 0; i < full && i < len(left); i++ {
-			left[len(left)-1-i] = '█'
-		}
-		if full < len(left) && cells-float64(full) >= 0.5 {
-			left[len(left)-1-full] = '▐'
-		}
+		row.WriteString(st.Render(centerInWidth(lbl, colW)))
+		row.WriteString(" ")
 	}
-	return string(left) + "│" + string(right)
+	return pad(" "+row.String(), w)
 }
 
-func eqRow(w, gain int, label string, selected bool) string {
-	lbl := fmt.Sprintf("%4s", label)
-	val := fmt.Sprintf("%+3d", gain)
-	barW := w - lipgloss.Width(lbl) - lipgloss.Width(val) - 2
-	bar := eqBar(barW, gain)
-	fg, bold := fgDim, false
-	if selected {
-		fg, bold = accentHi, true
+// eqBarRow draws one row of all 10 bands' bars, colored and partial-topped
+// the same way vizPanel does (see barCellAt/barZoneColor). isRefLine draws
+// the 0 dB dashed guide across any column that has no bar at this row.
+func eqBarRow(w, colW int, heights [10]float64, level float64, barRows int, isRefLine bool) string {
+	st := lipgloss.NewStyle().Foreground(barZoneColor(level, barRows))
+	dashSt := lipgloss.NewStyle().Foreground(fgDim)
+	gap := " "
+	if isRefLine {
+		gap = dashSt.Render("┄")
 	}
-	st := lipgloss.NewStyle().Foreground(fg).Bold(bold)
-	return st.Render(pad(lbl+" "+bar+" "+val, w))
+	var row strings.Builder
+	for i := 0; i < len(heights); i++ {
+		switch kind, glyph := barCellAt(heights[i], level, 0, false); kind {
+		case barCellFull:
+			row.WriteString(st.Render(strings.Repeat("█", colW)))
+		case barCellPartial:
+			row.WriteString(st.Render(strings.Repeat(string(glyph), colW)))
+		default:
+			if isRefLine {
+				row.WriteString(dashSt.Render(strings.Repeat("┄", colW)))
+			} else {
+				row.WriteString(strings.Repeat(" ", colW))
+			}
+		}
+		row.WriteString(gap)
+	}
+	return pad(" "+row.String(), w)
 }
 
-// eqPanel fills the same w×(h-1) body the visualizer normally occupies (see
-// vizPanel/lyricsPanel), one row per band, scrolled to keep the selected band
-// on screen when the panel is shorter than 10 rows.
+// eqPanel fills the same w×(h-1) body the visualizer normally occupies: a
+// grid of 10 bars, one per band, growing from a half-height 0 dB line, with a
+// label row (selected band bracketed) along the bottom.
 func eqPanel(w, h int, gains [10]int, sel int) string {
-	rows := max(1, h-1)
-	n := len(gains)
-	visible := min(rows, n)
-	start := max(0, min(sel-visible/2, n-visible))
+	totalRows := max(1, h-1)
+	colW := max(2, (w-1)/10-1)
+	if totalRows == 1 {
+		return eqLabelRow(w, colW, sel)
+	}
+
+	barRows := totalRows - 1
+	z := barRows / 2
+	refLine := barRows - z - 1
+	var heights [10]float64
+	for i, g := range gains {
+		heights[i] = eqBarHeight(g, z, barRows)
+	}
 
 	var b strings.Builder
-	for r := 0; r < rows; r++ {
-		i := start + r
-		if i < n {
-			b.WriteString(eqRow(w, gains[i], eqBandLabel(i), i == sel))
-		} else {
-			b.WriteString(pad("", w))
-		}
+	for r := 0; r < barRows; r++ {
+		level := float64(barRows - r)
+		b.WriteString(eqBarRow(w, colW, heights, level, barRows, r == refLine))
 		b.WriteString("\n")
 	}
-	return strings.TrimRight(b.String(), "\n")
+	b.WriteString(eqLabelRow(w, colW, sel))
+	return b.String()
 }

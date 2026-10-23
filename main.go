@@ -758,18 +758,18 @@ func (m model) updateKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "esc", "Q":
 			m.eqOpen = false
 			return m, nil
-		case "up", "k":
+		case "left", "h":
 			m.eqSel = (m.eqSel + 9) % 10
 			return m, nil
-		case "down", "j":
+		case "right", "l":
 			m.eqSel = (m.eqSel + 1) % 10
 			return m, nil
-		case "left", "h":
+		case "down", "j":
 			m.eqGains[m.eqSel] = clampEQGain(m.eqGains[m.eqSel] - 1)
 			saveEQGains(m.eqGains)
 			gains := m.eqGains
 			return m, doCmd(func() error { return eng.SetEQ(gains) })
-		case "right", "l":
+		case "up", "k":
 			m.eqGains[m.eqSel] = clampEQGain(m.eqGains[m.eqSel] + 1)
 			saveEQGains(m.eqGains)
 			gains := m.eqGains
@@ -1200,6 +1200,51 @@ func simulatedBands(t float64, playing bool) [32]float64 {
 	return bands
 }
 
+// barZoneColor picks accentLo/accent/accentHi by how high up the bar area a
+// row sits. Shared by the visualizer and the EQ panel so the two can't drift
+// apart on this.
+func barZoneColor(level float64, rows int) lipgloss.Color {
+	zone := level / float64(rows)
+	switch {
+	case zone > 0.66:
+		return accentHi
+	case zone > 0.33:
+		return accent
+	default:
+		return accentLo
+	}
+}
+
+type barCellKind int
+
+const (
+	barCellEmpty barCellKind = iota
+	barCellFull
+	barCellPartial
+	barCellPeak
+)
+
+// barPartialGlyphs is the fractional top-of-bar cell, empty to full.
+var barPartialGlyphs = []rune("▁▂▃▄▅▆▇█")
+
+// barCellAt decides what one column draws at one row: full once its bar
+// height reaches this row's level (counting rows from the bottom of the bar
+// area), a fractional glyph for the row the bar's top lands in, a peak marker
+// above that if one is tracked and lands here, otherwise empty. Shared by the
+// visualizer and the EQ panel.
+func barCellAt(height, level, peak float64, hasPeak bool) (kind barCellKind, glyph rune) {
+	switch {
+	case height >= level:
+		return barCellFull, 0
+	case height > level-1:
+		return barCellPartial, barPartialGlyphs[min(7, int((height-level+1)*8))]
+	case hasPeak && peak > level-1 && peak <= level:
+		return barCellPeak, 0
+	default:
+		return barCellEmpty, 0
+	}
+}
+
 func (m model) vizPanel(w, h int) string {
 	switch m.vizMode {
 	case vizTorus:
@@ -1213,31 +1258,24 @@ func (m model) vizPanel(w, h int) string {
 	if configBool(m.cfg, "visualizer.peaks", true) {
 		peaks = liveBarHeights(m.vizPeaks, bars, rows)
 	}
-	partial := []rune("▁▂▃▄▅▆▇█")
 	var b strings.Builder
 	for r := 0; r < rows; r++ {
 		level := float64(rows - r)
-		zone := level / float64(rows)
-		color := accentLo
-		if zone > 0.66 {
-			color = accentHi
-		} else if zone > 0.33 {
-			color = accent
-		}
-		st := lipgloss.NewStyle().Foreground(color)
+		st := lipgloss.NewStyle().Foreground(barZoneColor(level, rows))
 		markSt := lipgloss.NewStyle().Foreground(fgDim)
 		var row strings.Builder
 		for i := 0; i < bars; i++ {
-			// A marker only shows where the bar itself is not already drawn.
-			mark := peaks != nil && peaks[i] > level-1 && peaks[i] <= level &&
-				heights[i] <= level-1
-			switch {
-			case heights[i] >= level:
+			peak := 0.0
+			if peaks != nil {
+				peak = peaks[i]
+			}
+			switch kind, glyph := barCellAt(heights[i], level, peak, peaks != nil); kind {
+			case barCellFull:
 				row.WriteString(st.Render("██"))
-			case heights[i] > level-1:
-				c := string(partial[min(7, int((heights[i]-level+1)*8))])
+			case barCellPartial:
+				c := string(glyph)
 				row.WriteString(st.Render(c + c))
-			case mark:
+			case barCellPeak:
 				row.WriteString(markSt.Render("▔▔"))
 			default:
 				row.WriteString("  ")
@@ -1397,6 +1435,9 @@ func (m model) transportPanel(w int) string {
 		title, artist = "nothing playing", "press / to find music"
 	}
 	hints := transportHints(m.focus)
+	if m.eqOpen {
+		hints = eqHints
+	}
 	if m.note != "" {
 		hints = m.note + " "
 	}
@@ -1516,7 +1557,7 @@ func (m model) View() string {
 	}
 	var vizTitle, vizBody string
 	if m.eqOpen {
-		vizTitle = "EQ · " + eqPresetName(m.eqGains) + "  ·  P preset · 0 flat"
+		vizTitle = eqTitle(m.eqGains, m.eqSel)
 		vizBody = eqPanel(lay.vw, lay.vh-2, m.eqGains, m.eqSel)
 	} else {
 		vizTitle, vizBody = m.visualizerTitle(), m.vizPanel(lay.vw, lay.vh-2)
